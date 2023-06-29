@@ -50,9 +50,27 @@ const flipComparisonsTheRightWayAround: PluginItem = {
   },
 };
 
+const makeNumbersLonger: PluginItem = {
+  visitor: {
+    // Convert 5e3 to 5000
+    NumericLiteral(path) {
+      if (
+        typeof path.node.extra?.raw === "string" &&
+        path.node.extra?.raw?.includes("e")
+      ) {
+        path.replaceWith({
+          type: "NumericLiteral",
+          value: Number(path.node.extra.raw),
+        });
+      }
+    },
+  },
+};
+
 export default async (code: string): Promise<string> =>
   transformWithPlugins(code, [
     convertVoidToUndefined,
     flipComparisonsTheRightWayAround,
+    makeNumbersLonger,
     "transform-beautifier",
   ]);

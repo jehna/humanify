@@ -7,7 +7,7 @@ import humanify from "./humanify.js";
 
 const code = await fs.readFile("./example-minified.js", "utf-8");
 
-const PLUGINS = [not(phonetize), not(openai), humanify, prettier];
+const PLUGINS = [phonetize, not(openai), humanify, prettier];
 
 const formattedCode = await PLUGINS.reduce(
   (p, next) => p.then(next),
