@@ -1,11 +1,14 @@
-import { transform } from "@babel/core";
+import { transform, PluginItem } from "@babel/core";
 
-export default async (code: string): Promise<string> =>
-  await new Promise((resolve, reject) =>
+export const transformWithPlugins = async (
+  code: string,
+  plugins: PluginItem[]
+): Promise<string> => {
+  return await new Promise((resolve, reject) =>
     transform(
       code,
       {
-        plugins: ["transform-phonetize"],
+        plugins,
         compact: false,
         minified: false,
         comments: false,
@@ -21,3 +24,4 @@ export default async (code: string): Promise<string> =>
       }
     )
   );
+};

@@ -13,6 +13,7 @@
   "license": "MIT",
   "dependencies": {
     "@babel/core": "^7.22.5",
+    "@babel/types": "^7.22.5",
     "@types/babel__core": "^7.20.1",
     "babel-plugin-transform-phonetize": "^2.0.0",
     "dotenv": "^16.3.1",

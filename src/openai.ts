@@ -1,6 +1,7 @@
 import { Configuration, OpenAIApi } from "openai";
 import { OPENAI_TOKEN } from "./env.js";
 import { transform } from "@babel/core";
+import { transformWithPlugins } from "./babel-utils.js";
 
 const client = new OpenAIApi(new Configuration({ apiKey: OPENAI_TOKEN }));
 
@@ -61,29 +62,14 @@ async function renameVariablesAndFunctions(
   code: string,
   toRename: { name: string; newName: string }[]
 ): Promise<string> {
-  // Use Babel to rename variables and functions
-  return await new Promise((resolve, reject) =>
-    transform(
-      code,
-      {
-        plugins: [
-          {
-            visitor: {
-              Identifier: (path) => {
-                const rename = toRename.find((r) => r.name === path.node.name);
-                if (rename) path.node.name = rename.newName;
-              },
-            },
-          },
-        ],
+  return await transformWithPlugins(code, [
+    {
+      visitor: {
+        Identifier: (path) => {
+          const rename = toRename.find((r) => r.name === path.node.name);
+          if (rename) path.node.name = rename.newName;
+        },
       },
-      (err, result) => {
-        if (err || !result) {
-          reject(err);
-        } else {
-          resolve(result.code as string);
-        }
-      }
-    )
-  );
+    },
+  ]);
 }
