@@ -15,6 +15,7 @@
     "@babel/core": "^7.22.5",
     "@babel/types": "^7.22.5",
     "@types/babel__core": "^7.20.1",
+    "babel-plugin-transform-beautifier": "^0.1.0",
     "babel-plugin-transform-phonetize": "^2.0.0",
     "dotenv": "^16.3.1",
     "openai": "^3.3.0",
