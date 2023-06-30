@@ -6,7 +6,7 @@ export default (apiKey: string) => {
 
   return async (code: string): Promise<string> => {
     const chatCompletion = await client.createChatCompletion({
-      model: "gpt-3.5-turbo",
+      model: "gpt-3.5-turbo-16k",
       functions: [
         {
           name: "rename_variables_and_functions",
