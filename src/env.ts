@@ -2,9 +2,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export const OPENAI_TOKEN = env("OPENAI_TOKEN");
-
-function env(name: string, fallback?: string): string {
+export function env(name: string, fallback?: string): string {
   const value = process.env[name];
   if (value === undefined) {
     if (fallback !== undefined) {

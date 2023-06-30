@@ -21,9 +21,11 @@
     "openai": "^3.3.0",
     "prettier": "^2.8.8",
     "ts-node": "^10.9.1",
-    "typescript": "^5.1.5"
+    "typescript": "^5.1.5",
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
-    "@types/prettier": "^2.7.3"
+    "@types/prettier": "^2.7.3",
+    "@types/yargs": "^17.0.24"
   }
 }
