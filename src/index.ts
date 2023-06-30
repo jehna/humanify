@@ -16,8 +16,19 @@ const argv = yargs(process.argv.slice(2))
   .scriptName("npm start --")
   .command("<file>", "File to format")
   .options({
-    o: { type: "string", alias: "output" },
-    key: { type: "string", alias: "openai-key" },
+    output: { type: "string", alias: "o", description: "Output file" },
+    key: {
+      type: "string",
+      alias: "openai-key",
+      description: "OpenAI key (defaults to OPENAI_TOKEN environment variable)",
+    },
+    "4k": {
+      type: "boolean",
+      alias: "use-cheaper-model",
+      default: false,
+      description:
+        "Use the cheaper GPT-3.5 model with 4k context window (default is 16k)",
+    },
   })
   .demandCommand(1)
   .help()
@@ -32,7 +43,7 @@ const code = await fs.readFile(filename, "utf-8");
 const PLUGINS = [
   phonetize,
   humanify,
-  openai(argv.key ?? env("OPENAI_TOKEN")),
+  openai({ apiKey: argv.key ?? env("OPENAI_TOKEN"), use4k: argv["4k"] }),
   prettier,
 ];
 
@@ -41,8 +52,8 @@ const formattedCode = await PLUGINS.reduce(
   Promise.resolve<string>(code)
 );
 
-if (argv.o) {
-  await fs.writeFile(argv.o, formattedCode);
+if (argv.output) {
+  await fs.writeFile(argv.output, formattedCode);
 } else {
   console.log(formattedCode);
 }

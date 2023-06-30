@@ -1,12 +1,17 @@
 import { Configuration, OpenAIApi } from "openai";
 import { transformWithPlugins } from "./babel-utils.js";
 
-export default (apiKey: string) => {
+type Options = {
+  apiKey: string;
+  use4k: boolean;
+};
+
+export default ({ apiKey, use4k }: Options) => {
   const client = new OpenAIApi(new Configuration({ apiKey }));
 
   return async (code: string): Promise<string> => {
     const chatCompletion = await client.createChatCompletion({
-      model: "gpt-3.5-turbo-16k",
+      model: use4k ? "gpt-3.5-turbo" : "gpt-3.5-turbo-16k",
       functions: [
         {
           name: "rename_variables_and_functions",
