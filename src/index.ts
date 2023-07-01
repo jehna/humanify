@@ -6,6 +6,7 @@ import humanify from "./humanify.js";
 import yargs from "yargs/yargs";
 import { ensureFileExists } from "./fs-utils.js";
 import { env } from "./env.js";
+import { nop } from "./plugin-utils.js";
 
 const argv = yargs(process.argv.slice(2))
   .example("npm start example.js", "Format example.js and print to stdout")
@@ -21,6 +22,12 @@ const argv = yargs(process.argv.slice(2))
       type: "string",
       alias: "openai-key",
       description: "OpenAI key (defaults to OPENAI_TOKEN environment variable)",
+    },
+    local: {
+      type: "boolean",
+      alias: "no-openai",
+      default: false,
+      description: "Don't use OpenAI API, only local plugins",
     },
     "4k": {
       type: "boolean",
@@ -43,13 +50,15 @@ const code = await fs.readFile(filename, "utf-8");
 const PLUGINS = [
   phonetize,
   humanify,
-  openai({ apiKey: argv.key ?? env("OPENAI_TOKEN"), use4k: argv["4k"] }),
+  argv.local
+    ? nop
+    : openai({ apiKey: argv.key ?? env("OPENAI_TOKEN"), use4k: argv["4k"] }),
   prettier,
 ];
 
 const formattedCode = await PLUGINS.reduce(
   (p, next) => p.then(next),
-  Promise.resolve<string>(code)
+  Promise.resolve(code)
 );
 
 if (argv.output) {
