@@ -33,9 +33,9 @@ function splitString(inputString, chunkSize) {
 
 🚨 **NOTE:** 🚨
 
-This tool does not yet work with long JS files. Code is not split, so be vary of
-the ChatGPT's 16k context window. This roughly translates to 8k words in the
-input file. Experimental fix is soon available.
+This tool is considered experimental and has varying performance with long JS
+files. Long files may take a long time to process and will burn some money from
+your OpenAI account depending on the size of the file.
 
 ## Getting started
 

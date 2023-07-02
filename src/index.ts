@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import prettier from "./prettier.js";
 import phonetize from "./phonetize.js";
-import openai from "./openai.js";
+import openai from "./openai/openai.js";
 import humanify from "./humanify.js";
 import yargs from "yargs/yargs";
 import { ensureFileExists } from "./fs-utils.js";

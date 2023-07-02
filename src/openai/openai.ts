@@ -1,5 +1,9 @@
 import { Configuration, OpenAIApi } from "openai";
-import { transformWithPlugins } from "./babel-utils.js";
+import { splitCode } from "./split-file.js";
+import {
+  Rename,
+  renameVariablesAndFunctions,
+} from "./rename-variables-and-functions.js";
 
 type Options = {
   apiKey: string;
@@ -10,6 +14,18 @@ export default ({ apiKey, use4k }: Options) => {
   const client = new OpenAIApi(new Configuration({ apiKey }));
 
   return async (code: string): Promise<string> => {
+    const codeBlocks = await splitCode(code, use4k);
+    let variablesAndFunctionsToRename: Rename[] = [];
+    let i = 0;
+    for (const codeBlock of codeBlocks) {
+      const renames = await codeToVariableRenames(codeBlock);
+      variablesAndFunctionsToRename =
+        variablesAndFunctionsToRename.concat(renames);
+    }
+    return renameVariablesAndFunctions(code, variablesAndFunctionsToRename);
+  };
+
+  async function codeToVariableRenames(code: string) {
     const chatCompletion = await client.createChatCompletion({
       model: use4k ? "gpt-3.5-turbo" : "gpt-3.5-turbo-16k",
       functions: [
@@ -46,35 +62,21 @@ export default ({ apiKey, use4k }: Options) => {
       messages: [
         {
           role: "assistant",
-          content: "Rename Javascript variables and functions",
+          content:
+            "Rename all Javascript variables and functions to have descriptive names based on their usage in the code.",
         },
         { role: "user", content: code },
       ],
     });
     const data = chatCompletion.data.choices[0];
-    if (data.finish_reason !== "function_call") return code;
+    if (data.finish_reason !== "function_call") return [];
 
     const {
       variablesAndFunctionsToRename,
-    }: { variablesAndFunctionsToRename: { name: string; newName: string }[] } =
-      JSON.parse(data.message?.function_call?.arguments!);
+    }: { variablesAndFunctionsToRename: Rename[] } = JSON.parse(
+      data.message?.function_call?.arguments!
+    );
 
-    return renameVariablesAndFunctions(code, variablesAndFunctionsToRename);
-  };
-
-  async function renameVariablesAndFunctions(
-    code: string,
-    toRename: { name: string; newName: string }[]
-  ): Promise<string> {
-    return await transformWithPlugins(code, [
-      {
-        visitor: {
-          Identifier: (path) => {
-            const rename = toRename.find((r) => r.name === path.node.name);
-            if (rename) path.node.name = rename.newName;
-          },
-        },
-      },
-    ]);
+    return variablesAndFunctionsToRename;
   }
 };
