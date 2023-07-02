@@ -73,9 +73,17 @@ export default ({ apiKey, use4k }: Options) => {
     const {
       variablesAndFunctionsToRename,
     }: { variablesAndFunctionsToRename: Rename[] } = JSON.parse(
-      data.message?.function_call?.arguments!
+      fixPerhapsBrokenResponse(data.message?.function_call?.arguments!)
     );
 
     return variablesAndFunctionsToRename;
   }
 };
+
+function fixPerhapsBrokenResponse(jsonResponse: string) {
+  // Sometimes the response has an extra comma at the end of the array, like:
+  // {"result": [{"foo": "bar"}, { "foo": "baz" },\n ]}
+  // This is invalid JSON, so we need to remove the comma.
+
+  return jsonResponse.replace(/},\s*]/im, "}]");
+}
