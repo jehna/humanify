@@ -4,6 +4,7 @@ import {
   Rename,
   renameVariablesAndFunctions,
 } from "./rename-variables-and-functions.js";
+import { mapPromisesParallel } from "./run-promises-in-parallel.js";
 
 type Options = {
   apiKey: string;
@@ -16,11 +17,11 @@ export default ({ apiKey, use4k }: Options) => {
   return async (code: string): Promise<string> => {
     const codeBlocks = await splitCode(code, use4k);
     let variablesAndFunctionsToRename: Rename[] = [];
-    for (const codeBlock of codeBlocks) {
+    await mapPromisesParallel(10, codeBlocks, async (codeBlock) => {
       const renames = await codeToVariableRenames(codeBlock);
       variablesAndFunctionsToRename =
         variablesAndFunctionsToRename.concat(renames);
-    }
+    });
     return renameVariablesAndFunctions(code, variablesAndFunctionsToRename);
   };
 
