@@ -16,7 +16,6 @@ export default ({ apiKey, use4k }: Options) => {
   return async (code: string): Promise<string> => {
     const codeBlocks = await splitCode(code, use4k);
     let variablesAndFunctionsToRename: Rename[] = [];
-    let i = 0;
     for (const codeBlock of codeBlocks) {
       const renames = await codeToVariableRenames(codeBlock);
       variablesAndFunctionsToRename =

@@ -1,12 +1,12 @@
 import fs from "fs/promises";
 import prettier from "./prettier.js";
-import phonetize from "./phonetize.js";
 import openai from "./openai/openai.js";
 import humanify from "./humanify.js";
 import yargs from "yargs/yargs";
 import { ensureFileExists } from "./fs-utils.js";
 import { env } from "./env.js";
 import { nop } from "./plugin-utils.js";
+import fixShadowing from "./fix-shadowing.js";
 
 const argv = yargs(process.argv.slice(2))
   .example("npm start example.js", "Format example.js and print to stdout")
@@ -48,7 +48,7 @@ await ensureFileExists(filename);
 const code = await fs.readFile(filename, "utf-8");
 
 const PLUGINS = [
-  phonetize,
+  fixShadowing,
   humanify,
   argv.local
     ? nop
