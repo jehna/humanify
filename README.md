@@ -33,9 +33,15 @@ function splitString(inputString, chunkSize) {
 
 🚨 **NOTE:** 🚨
 
-This tool is considered experimental and has varying performance with long JS
-files. Long files may take a long time to process and will burn some money from
-your OpenAI account depending on the size of the file.
+Long files may take some time to process and use a lot of tokens. For a rough
+estimate, the tool takes about 2 tokens per character to process a file:
+
+```shell
+echo "$((2 * $(wc -c < yourscript.min.js)))"
+```
+
+So for refrence: a minified `bootstrap.min.js` would take about $0.5 to
+un-minify.
 
 ## Getting started
 
