@@ -56,10 +56,10 @@ https://openai.com/.
 
 There are several ways to provide the API key to the tool:
 ```shell
-echo "OPENAI_TOKEN=your-token" > .env && npm start -- minified-file.js
-export OPENAI_TOKEN="your-token" && npm start -- minified-file.js
-OPENAI_TOKEN=your-token npm start -- minified-file.js
-npm start -- --key="your-token" minified-file.js
+echo "OPENAI_TOKEN=your-token" > .env && npm start --  -o unminified.js minified-file.js
+export OPENAI_TOKEN="your-token" && npm start --  -o unminified.js minified-file.js
+OPENAI_TOKEN=your-token npm start --  -o unminified.js minified-file.js
+npm start -- --key="your-token"  -o unminified.js minified-file.js
 ```
 
 Use your preferred way to provide the API key. Use `npm start -- --help` to see

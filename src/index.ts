@@ -9,7 +9,6 @@ import { nop } from "./plugin-utils.js";
 import fixShadowing from "./fix-shadowing.js";
 
 const argv = yargs(process.argv.slice(2))
-  .example("npm start example.js", "Format example.js and print to stdout")
   .example(
     "npm start -o example-formatted.js example.js",
     "Format example.js and save to example-formatted.js"
@@ -17,7 +16,12 @@ const argv = yargs(process.argv.slice(2))
   .scriptName("npm start --")
   .command("<file>", "File to format")
   .options({
-    output: { type: "string", alias: "o", description: "Output file" },
+    output: {
+      type: "string",
+      alias: "o",
+      description: "Output file",
+      require: true,
+    },
     key: {
       type: "string",
       alias: "openai-key",
@@ -61,8 +65,4 @@ const formattedCode = await PLUGINS.reduce(
   Promise.resolve(code)
 );
 
-if (argv.output) {
-  await fs.writeFile(argv.output, formattedCode);
-} else {
-  console.log(formattedCode);
-}
+await fs.writeFile(argv.output, formattedCode);
