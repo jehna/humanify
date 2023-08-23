@@ -1,2 +1,4 @@
-example-*.js
+example-*
 .env
+.ipynb_checkpoints
+__pycache__

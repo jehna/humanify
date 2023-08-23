@@ -7,6 +7,8 @@ import { ensureFileExists } from "./fs-utils.js";
 import { env } from "./env.js";
 import { nop } from "./plugin-utils.js";
 import fixShadowing from "./fix-shadowing.js";
+import { localReanme } from "./local-rename.js";
+import { webcrack } from "./webcrack.js";
 
 const argv = yargs(process.argv.slice(2))
   .example(
@@ -49,20 +51,26 @@ const filename = argv._[0] as string;
 
 await ensureFileExists(filename);
 
-const code = await fs.readFile(filename, "utf-8");
+const bundledCode = await fs.readFile(filename, "utf-8");
 
 const PLUGINS = [
-  fixShadowing,
   humanify,
   argv.local
-    ? nop
+    ? localReanme()
     : openai({ apiKey: argv.key ?? env("OPENAI_TOKEN"), use4k: argv["4k"] }),
   prettier,
 ];
 
-const formattedCode = await PLUGINS.reduce(
-  (p, next) => p.then(next),
-  Promise.resolve(code)
-);
+const extractedFiles = await webcrack(bundledCode, argv.output);
 
-await fs.writeFile(argv.output, formattedCode);
+for (const file of extractedFiles) {
+  const code = await fs.readFile(file.path, "utf-8");
+  const formattedCode = await PLUGINS.reduce(
+    (p, next) => p.then(next),
+    Promise.resolve(code)
+  );
+
+  await fs.writeFile(file.path, formattedCode);
+}
+
+process.exit(0); // Kills the zeromq socket
