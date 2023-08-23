@@ -6,6 +6,10 @@ un-minify Javascript code. Note that LLMs don't perform any structural changes �
 they only provide hints to rename variables and functions. The heavy lifting is
 done by Babel on AST level to ensure code stays 1-1 equivalent.
 
+### ➡️ Check out the [introduction blog post][blogpost] for in-depth explanation!
+
+[blogpost]: https://thejunkland.com/blog/using-llms-to-reverse-javascript-minification
+
 ## Example
 
 Given the following minified code:
