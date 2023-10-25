@@ -107,7 +107,7 @@ Prerequisited:
 Run the following command to install the required Python packages and activate the environment:
 
 ```shell
-conda env create -f environment.yml
+conda env create -f environment.yaml
 conda activate base
 ```
 
