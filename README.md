@@ -60,9 +60,9 @@ First install the dependencies:
 npm install
 ```
 
-Next you'll need to decide wether to use ChatGPT or llama2. In a nutshell:
+Next you'll need to decide whether to use ChatGPT or llama2. In a nutshell:
 
-* ChatPGPT
+* ChatGPT
   * Runs on someone else's computer that's specifically optimized for this kind
     of things
   * Costs money depending on the length of your code
@@ -72,7 +72,7 @@ Next you'll need to decide wether to use ChatGPT or llama2. In a nutshell:
   * Runs locally
   * Is free
   * Is less accurate
-  * Needs a local GPU with ~60gm RAM (M1 Mac works just fine)
+  * Needs a local GPU with ~60gb RAM (M1 Mac works just fine)
   * Runs as fast as your GPU does
 
 See instructions below for each option:
@@ -95,7 +95,7 @@ all available options.
 
 ### llama2
 
-Prerequisited:
+Prerequisites:
 * You'll need to have a Python 3 environment with [conda installed][conda].
 * You need a Huggingface account with access to [llama-2-7b-chat-hf
   model][llama2model]. Make sure to read the instructions on the model page
