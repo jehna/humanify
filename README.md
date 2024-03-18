@@ -1,10 +1,11 @@
 # Humanify
-> Un-minify Javascript code using LLMs ("AI")
+> Deobfuscate Javascript code using LLMs ("AI")
 
 This tool uses large language modeles (like ChatGPT & llama2) and other tools to
-un-minify Javascript code. Note that LLMs don't perform any structural changes –
-they only provide hints to rename variables and functions. The heavy lifting is
-done by Babel on AST level to ensure code stays 1-1 equivalent.
+deobfuscate, unminify, transpile and unpack Javascript code. Note that LLMs
+don't perform any structural changes – they only provide hints to rename
+variables and functions. The heavy lifting is done by Babel on AST level to
+ensure code stays 1-1 equivalent.
 
 ### ➡️ Check out the [introduction blog post][blogpost] for in-depth explanation!
 
@@ -84,10 +85,10 @@ https://openai.com/.
 
 There are several ways to provide the API key to the tool:
 ```shell
-echo "OPENAI_TOKEN=your-token" > .env && npm start --  -o unminified.js minified-file.js
-export OPENAI_TOKEN="your-token" && npm start --  -o unminified.js minified-file.js
-OPENAI_TOKEN=your-token npm start --  -o unminified.js minified-file.js
-npm start -- --key="your-token"  -o unminified.js minified-file.js
+echo "OPENAI_TOKEN=your-token" > .env && npm start --  -o deobfuscated.js obfuscated-file.js
+export OPENAI_TOKEN="your-token" && npm start --  -o deobfuscated.js obfuscated-file.js
+OPENAI_TOKEN=your-token npm start --  -o deobfuscated.js obfuscated-file.js
+npm start -- --key="your-token"  -o deobfuscated.js obfuscated-file.js
 ```
 
 Use your preferred way to provide the API key. Use `npm start -- --help` to see
@@ -114,7 +115,7 @@ conda activate base
 You can now run the tool with:
 
 ```shell
-npm start -- --local -o unminified.js minified-file.js
+npm start -- --local -o deobfuscated.js obfuscated-file.js
 ```
 
 Note: this downloads ~13gb of model data to your computer on the first run.
