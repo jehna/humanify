@@ -109,7 +109,7 @@ Run the following command to install the required Python packages and activate t
 
 ```shell
 conda env create -f environment.yaml
-conda activate base
+conda activate humanify
 ```
 
 You can now run the tool with:
