@@ -35,13 +35,6 @@ const argv = yargs(process.argv.slice(2))
       default: false,
       description: "Don't use OpenAI API, only local plugins",
     },
-    "4k": {
-      type: "boolean",
-      alias: "use-cheaper-model",
-      default: false,
-      description:
-        "Use the cheaper GPT-3.5 model with 4k context window (default is 16k)",
-    },
   })
   .demandCommand(1)
   .help()
@@ -57,7 +50,7 @@ const PLUGINS = [
   humanify,
   argv.local
     ? localReanme()
-    : openai({ apiKey: argv.key ?? env("OPENAI_TOKEN"), use4k: argv["4k"] }),
+    : openai({ apiKey: argv.key ?? env("OPENAI_TOKEN") }),
   prettier,
 ];
 

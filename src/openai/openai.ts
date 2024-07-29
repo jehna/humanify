@@ -1,4 +1,4 @@
-import { Configuration, OpenAIApi } from "openai";
+import {  OpenAI } from "openai";
 import { splitCode } from "./split-file.js";
 import {
   Rename,
@@ -8,14 +8,13 @@ import { mapPromisesParallel } from "./run-promises-in-parallel.js";
 
 type Options = {
   apiKey: string;
-  use4k: boolean;
 };
 
-export default ({ apiKey, use4k }: Options) => {
-  const client = new OpenAIApi(new Configuration({ apiKey }));
+export default ({ apiKey }: Options) => {
+  const openai = new OpenAI({ apiKey: apiKey, });
 
   return async (code: string): Promise<string> => {
-    const codeBlocks = await splitCode(code, use4k);
+    const codeBlocks = await splitCode(code);
     let variablesAndFunctionsToRename: Rename[] = [];
     await mapPromisesParallel(10, codeBlocks, async (codeBlock) => {
       const renames = await codeToVariableRenames(codeBlock);
@@ -26,39 +25,42 @@ export default ({ apiKey, use4k }: Options) => {
   };
 
   async function codeToVariableRenames(code: string) {
-    const chatCompletion = await client.createChatCompletion({
-      model: use4k ? "gpt-3.5-turbo" : "gpt-3.5-turbo-16k",
-      functions: [
+    const chatCompletion = await openai.chat.completions.create({
+      model:"gpt-4o-mini",
+      tools: [
         {
-          name: "rename_variables_and_functions",
-          description: "Rename variables and function names in Javascript code",
-          parameters: {
-            type: "object",
-            properties: {
-              variablesAndFunctionsToRename: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: {
-                      type: "string",
-                      description:
-                        "The name of the variable or function name to rename",
+          "type": "function",
+          "function": {
+            "name": "rename_variables_and_functions",
+            "description": "Rename variables and function names in Javascript code",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "variablesAndFunctionsToRename": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "The name of the variable or function name to rename",
+                      },
+                      "newName": {
+                        "type": "string",
+                        "description":
+                          "The new name of the variable or function name",
+                      },
                     },
-                    newName: {
-                      type: "string",
-                      description:
-                        "The new name of the variable or function name",
-                    },
+                    "required": ["name", "newName"],
                   },
-                  required: ["name", "newName"],
                 },
               },
+              "required": ["variablesToRename"],
             },
-            required: ["variablesToRename"],
-          },
+          }
         },
       ],
+      tool_choice: "auto",
       messages: [
         {
           role: "assistant",
@@ -68,18 +70,21 @@ export default ({ apiKey, use4k }: Options) => {
         { role: "user", content: code },
       ],
     });
-    const data = chatCompletion.data.choices[0];
-    if (data.finish_reason !== "function_call") return [];
-
-    const {
-      variablesAndFunctionsToRename,
-    }: { variablesAndFunctionsToRename: Rename[] } = JSON.parse(
-      fixPerhapsBrokenResponse(data.message?.function_call?.arguments!)
-    );
-
+    const data = chatCompletion.choices[0];
+    console.log("WE GOT HERE")
+    console.log(data.finish_reason)
+    if (data.finish_reason !== "tool_calls") return [];
+    console.log("WE GOT HERE")
+    const variablesAndFunctionsToRename = chatCompletion.choices[0].message.tool_calls.flatMap(function (value) {
+      const { variablesAndFunctionsToRename }: { variablesAndFunctionsToRename: Rename[] } = JSON.parse(
+        fixPerhapsBrokenResponse(value.function?.arguments!)
+      );
+      console.log(variablesAndFunctionsToRename)
     return variablesAndFunctionsToRename;
-  }
-};
+    });
+    return variablesAndFunctionsToRename;
+  };
+}
 
 function fixPerhapsBrokenResponse(jsonResponse: string) {
   // Sometimes the response has an extra comma at the end of the array, like:

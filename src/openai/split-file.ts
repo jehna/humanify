@@ -1,4 +1,4 @@
-import { encode } from "gpt-3-encoder";
+import { encode } from "gpt-tokenizer";
 
 const START_NEXT_CODE_BLOCK_AT_FRACTION = (1 / 5) * 4;
 const SOFT_LIMIT_FRACTION = 1 / 4;
@@ -6,12 +6,11 @@ const HARD_LIMIT_FRACTION = 1 / 3; // TODO: Check how much tokens we usually nee
 
 export async function splitCode(
   code: string,
-  use4k: boolean
 ): Promise<string[]> {
   let codeBlocks: string[] = [];
   let currentCode = code;
 
-  const numTokensForRequestAndResponse = use4k ? 4000 : 16000;
+  const numTokensForRequestAndResponse = 32000;
   const tokenSoftLimit = numTokensForRequestAndResponse * SOFT_LIMIT_FRACTION;
   const tokenHardLimit = numTokensForRequestAndResponse * HARD_LIMIT_FRACTION;
 
