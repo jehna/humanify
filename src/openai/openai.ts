@@ -71,15 +71,11 @@ export default ({ apiKey }: Options) => {
       ],
     });
     const data = chatCompletion.choices[0];
-    console.log("WE GOT HERE")
-    console.log(data.finish_reason)
     if (data.finish_reason !== "tool_calls") return [];
-    console.log("WE GOT HERE")
     const variablesAndFunctionsToRename = chatCompletion.choices[0].message.tool_calls.flatMap(function (value) {
       const { variablesAndFunctionsToRename }: { variablesAndFunctionsToRename: Rename[] } = JSON.parse(
         fixPerhapsBrokenResponse(value.function?.arguments!)
       );
-      console.log(variablesAndFunctionsToRename)
     return variablesAndFunctionsToRename;
     });
     return variablesAndFunctionsToRename;
