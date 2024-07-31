@@ -2,7 +2,7 @@ import {
   GemmaChatWrapper,
   getLlama,
   LlamaChatSession,
-  LlamaGrammar,
+  LlamaGrammar
 } from "node-llama-cpp";
 import { Gbnf } from "./gbnf.js";
 
@@ -18,7 +18,7 @@ export async function llama(opts?: {
 }): Promise<Prompt> {
   const llama = await getLlama();
   const model = await llama.loadModel({
-    modelPath: opts?.modelPath ?? "models/model.gguf",
+    modelPath: opts?.modelPath ?? "models/model.gguf"
   });
 
   const context = await model.createContext({ seed: opts?.seed });
@@ -28,14 +28,14 @@ export async function llama(opts?: {
       contextSequence: context.getSequence(),
       autoDisposeSequence: true,
       chatWrapper: new GemmaChatWrapper(),
-      systemPrompt,
+      systemPrompt
     });
     const response = await session.promptWithMeta(userPrompt, {
       temperature: 0.8,
       grammar: new LlamaGrammar(llama, {
-        grammar: `${responseGrammar}`,
+        grammar: `${responseGrammar}`
       }),
-      stopOnAbortSignal: true,
+      stopOnAbortSignal: true
     });
     session.dispose();
     return responseGrammar.parseResult(response.responseText);

@@ -5,7 +5,7 @@ import { assertMatches } from "./test-utils.js";
 
 const prompt = await llama({ seed: 1, modelPath: process.env["MODEL"] }); // TODO: Figure out how to download a small enough model
 
-test("Unminifies a function name", async (t) => {
+test("Unminifies a function name", async () => {
   const result = await unminifyVariableName(
     prompt,
     "a",
@@ -15,7 +15,7 @@ test("Unminifies a function name", async (t) => {
   assertMatches(result, ["increment", "addOne"]);
 });
 
-test("Unminifies an argument", async (t) => {
+test("Unminifies an argument", async () => {
   const result = await unminifyVariableName(
     prompt,
     "b",
