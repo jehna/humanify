@@ -4,20 +4,26 @@ import {
   LlamaChatSession,
   LlamaGrammar,
 } from "node-llama-cpp";
+import { Gbnf } from "./gbnf.js";
 
-export async function llama(seed?: number) {
+export type Prompt = (
+  systemPrompt: string,
+  userPrompt: string,
+  responseGrammar: Gbnf
+) => Promise<string>;
+
+export async function llama(opts?: {
+  seed?: number;
+  modelPath?: string;
+}): Promise<Prompt> {
   const llama = await getLlama();
   const model = await llama.loadModel({
-    modelPath: "models/model.gguf",
+    modelPath: opts?.modelPath ?? "models/model.gguf",
   });
 
-  const context = await model.createContext({ seed });
+  const context = await model.createContext({ seed: opts?.seed });
 
-  return async (
-    systemPrompt: string,
-    userPrompt: string,
-    responseGrammar: string
-  ) => {
+  return async (systemPrompt, userPrompt, responseGrammar) => {
     const session = new LlamaChatSession({
       contextSequence: context.getSequence(),
       autoDisposeSequence: true,
@@ -27,24 +33,11 @@ export async function llama(seed?: number) {
     const response = await session.promptWithMeta(userPrompt, {
       temperature: 0.8,
       grammar: new LlamaGrammar(llama, {
-        grammar: responseGrammar,
+        grammar: `${responseGrammar}`,
       }),
       stopOnAbortSignal: true,
     });
     session.dispose();
-    return response.responseText;
+    return responseGrammar.parseResult(response.responseText);
   };
-}
-
-function grammarString(grammar: (string | RegExp)[]) {
-  return (
-    "root ::= " +
-    grammar
-      .map((rule) =>
-        rule instanceof RegExp
-          ? rule.source
-          : `"${rule.replaceAll('"', '\\"')}"`
-      )
-      .join(" ")
-  );
 }
