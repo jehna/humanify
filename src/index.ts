@@ -1,12 +1,15 @@
-import { readFile } from "fs/promises";
-import { llama } from "./llama.js";
-import { unminifyVariableName } from "./unminify-variable-name.js";
+#!/usr/bin/env -S npx tsx
+import { version } from "../package.json";
+import { download } from "./commands/download.js";
+import { local } from "./commands/local.js";
+import { openai } from "./commands/openai.js";
+import { cli } from "./cli.js";
 
-console.log(
-  await unminifyVariableName(
-    await llama({ modelPath: "models/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf" }),
-    "a",
-    "string-utils.js",
-    await readFile("example.min.js", "utf-8")
-  )
-);
+cli()
+  .name("humanify")
+  .description("Unminify code using OpenAI's API or a local LLM")
+  .version(version)
+  .addCommand(local)
+  .addCommand(openai)
+  .addCommand(download())
+  .parse(process.argv);

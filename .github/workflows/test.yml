@@ -19,4 +19,4 @@ jobs:
       - run: npm run download-ci-model
       - run: npm install --ci
       - run: npm run lint
-      - run: npm test-ci
+      - run: npm test

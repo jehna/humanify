@@ -5,28 +5,33 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "tsx src/index.ts",
-    "test": "tsx --test src/*.test.ts",
+    "build": "pkgroll",
+    "test": "npm run build && tsx --test src/*.test.ts",
     "lint": "npm run lint:prettier && npm run lint:eslint",
     "lint:prettier": "prettier --check src/* src/**/*",
     "lint:eslint": "eslint src/* src/**/*",
-    "test-ci": "MODEL=models/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf npm test",
-    "download-ci-model": "mkdir -p models && if [ ! -f models/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf ]; then curl -o models/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf 'https://huggingface.co/bartowski/Phi-3.1-mini-4k-instruct-GGUF/resolve/main/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf?download=true'; fi"
+    "download-ci-model": "npx humanify download 2gb"
+  },
+  "bin": {
+    "humanify": "dist/index.mjs"
   },
   "type": "module",
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "commander": "^12.1.0",
     "node-llama-cpp": "^3.0.0-beta.40",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4"
   },
   "devDependencies": {
-    "prettier": "^3.3.3",
     "@eslint/js": "^9.8.0",
     "@types/node": "^22.0.0",
     "eslint": "^9.8.0",
     "globals": "^15.8.0",
+    "pkgroll": "^2.4.2",
+    "prettier": "^3.3.3",
     "typescript-eslint": "^8.0.0"
   }
 }

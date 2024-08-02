@@ -12,13 +12,13 @@ export type Prompt = (
   responseGrammar: Gbnf
 ) => Promise<string>;
 
-export async function llama(opts?: {
+export async function llama(opts: {
   seed?: number;
-  modelPath?: string;
+  modelPath: string;
 }): Promise<Prompt> {
   const llama = await getLlama();
   const model = await llama.loadModel({
-    modelPath: opts?.modelPath ?? "models/model.gguf"
+    modelPath: opts?.modelPath
   });
 
   const context = await model.createContext({ seed: opts?.seed });
