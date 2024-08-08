@@ -6,7 +6,10 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "build": "pkgroll",
-    "test": "npm run build && tsx --test src/*.test.ts",
+    "test": "npm run build && npm run test:unit && npm run test:e2e && npm run test:llm",
+    "test:unit": "find src -name '*.test.ts' | xargs tsx --test",
+    "test:e2e": "find src -name '*.e2etest.ts' | xargs tsx --test",
+    "test:llm": "find src -name '*.llmtest.ts' | xargs tsx --test --test-concurrency=1",
     "lint": "npm run lint:prettier && npm run lint:eslint",
     "lint:prettier": "prettier --check src/* src/**/*",
     "lint:eslint": "eslint src/* src/**/*",
@@ -20,10 +23,15 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/types": "^7.25.2",
+    "@types/babel__core": "^7.20.5",
+    "babel-plugin-transform-beautifier": "^0.1.0",
     "commander": "^12.1.0",
     "node-llama-cpp": "^3.0.0-beta.40",
     "tsx": "^4.16.2",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "webcrack": "^2.13.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",

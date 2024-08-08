@@ -25,3 +25,13 @@ export async function humanify(...argv: string[]) {
   );
   return { stdout: stdout.join(""), stderr: stderr.join("") };
 }
+
+export function ensure<T>(
+  value: NonNullable<T> | undefined | null,
+  message: string = "Value was null or undeined"
+): NonNullable<T> {
+  if (value === undefined || value === null) {
+    throw new Error(message);
+  }
+  return value;
+}
