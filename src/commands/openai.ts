@@ -3,6 +3,7 @@ import prettier from "../plugins/prettier.js";
 import { unminify } from "../unminify.js";
 import babel from "../plugins/babel/babel.js";
 import { openaiRename } from "../plugins/openai/openai-rename.js";
+import { verbose } from "../verbose.js";
 
 export const openai = cli()
   .name("openai")
@@ -10,8 +11,13 @@ export const openai = cli()
   .option("-m, --model <model>", "The model to use", "gpt-4o-mini")
   .option("-o, --outputDir <output>", "The output directory", "output")
   .option("-k, --apiKey <apiKey>", "The OpenAI API key")
+  .option("--verbose", "Show verbose output")
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
+    if (opts.verbose) {
+      verbose.enabled = true;
+    }
+
     const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY;
     await unminify(filename, opts.outputDir, [
       babel,

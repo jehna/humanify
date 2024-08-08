@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { visitAllIdentifiers } from "../local-llm-rename/visit-all-identifiers.js";
 import { showPercentage } from "../../progress.js";
+import { verbose } from "../../verbose.js";
 
 export function openaiRename({
   apiKey,
@@ -10,10 +11,14 @@ export function openaiRename({
   model: string;
 }) {
   const client = new OpenAI({ apiKey });
+
   return async (code: string): Promise<string> => {
     return await visitAllIdentifiers(
       code,
       async (name, surroundingCode) => {
+        verbose.log(`Renaming ${name}`);
+        verbose.log("Context: ", surroundingCode);
+
         const response = await client.chat.completions.create(
           toRenamePrompt(name, surroundingCode, model)
         );
@@ -21,7 +26,11 @@ export function openaiRename({
         if (!result) {
           throw new Error("Failed to rename", { cause: response });
         }
-        return JSON.parse(result).newName;
+        const renamed = JSON.parse(result).newName;
+
+        verbose.log(`Renamed to ${renamed}`);
+
+        return renamed;
       },
       showPercentage
     );

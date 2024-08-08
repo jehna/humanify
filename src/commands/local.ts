@@ -5,6 +5,7 @@ import { unminify } from "../unminify.js";
 import prettier from "../plugins/prettier.js";
 import babel from "../plugins/babel/babel.js";
 import { localReanme } from "../plugins/local-llm-rename/local-llm-rename.js";
+import { verbose } from "../verbose.js";
 
 export const local = cli()
   .name("local")
@@ -12,8 +13,13 @@ export const local = cli()
   .showHelpAfterError(true)
   .option("-m, --model <model>", "The model to use", DEFAULT_MODEL)
   .option("-o, --outputDir <output>", "The output directory", "output")
+  .option("--verbose", "Show verbose output")
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
+    if (opts.verbose) {
+      verbose.enabled = true;
+    }
+
     const prompt = await llama({ modelPath: getEnsuredModelPath(opts.model) });
     await unminify(filename, opts.outputDir, [
       babel,
