@@ -12,7 +12,7 @@ export async function unminifyVariableName(
     code,
     gbnf`A good description for '${variableName}' is: ${/[^\r\n\x0b\x0c\x85\u2028\u2029.]+/}.`
   );
-  console.log(description);
+  //console.log(description);
 
   return await prompt(
     `You are a Code Assistant.`,

@@ -8,7 +8,11 @@ const traverse = babelTraverse.default; // How does one import a callble default
 
 type Visitor = (name: string, scope: string) => Promise<string>;
 
-export async function visitAllIdentifiers(code: string, visitor: Visitor) {
+export async function visitAllIdentifiers(
+  code: string,
+  visitor: Visitor,
+  onProgress?: (percentageDone: number) => void
+) {
   const ast = await parseAsync(code);
   const visited = new Set<string>();
   const renames = new Set<string>();
@@ -16,6 +20,7 @@ export async function visitAllIdentifiers(code: string, visitor: Visitor) {
     throw new Error("Failed to parse code");
   }
 
+  const numRenamesExpected = countBindingIdentifiers(ast);
   while (true) {
     const smallestScope = await findIdentifierWithLargestScopeNotVisited(
       ast,
@@ -40,7 +45,10 @@ export async function visitAllIdentifiers(code: string, visitor: Visitor) {
 
     smallestScope.scope.rename(smallestScopeNode.name, safeRenamed);
     markVisited(smallestScope, smallestScopeNode.name, visited);
+
+    onProgress?.(visited.size / numRenamesExpected);
   }
+  onProgress?.(1);
 
   const stringified = await transformFromAstAsync(ast);
   if (!stringified?.code) {
@@ -74,6 +82,16 @@ function findIdentifierWithLargestScopeNotVisited(
   });
 
   return result;
+}
+
+function countBindingIdentifiers(node: Node) {
+  let count = 0;
+  traverse(node, {
+    BindingIdentifier() {
+      count++;
+    }
+  });
+  return count;
 }
 
 function hasVisited(path: NodePath<Identifier>, visited: Set<string>) {

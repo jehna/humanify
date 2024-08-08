@@ -20,3 +20,13 @@ function formatBytes(numBytes: number) {
   }
   return `${numBytes.toFixed(2)} ${units[unitIndex]}`;
 }
+
+export function showPercentage(percentage: number) {
+  const percentageStr = Math.round(percentage * 100);
+  process.stdout.clearLine(0);
+  process.stdout.cursorTo(0);
+  process.stdout.write(`Processing: ${percentageStr}%`);
+  if (percentage === 1) {
+    process.stdout.write("\n");
+  }
+}

@@ -7,7 +7,7 @@ export async function defineFilename(prompt: Prompt, code: string) {
     code,
     gbnf`${/[^\r\n\x0b\x0c\x85\u2028\u2029.]+/}.`
   );
-  console.log(description);
+  //console.log(description);
 
   const filename = await prompt(
     `Create a name for a Javascript file for a code with the following description. Use lisp-case naming convention.`,
