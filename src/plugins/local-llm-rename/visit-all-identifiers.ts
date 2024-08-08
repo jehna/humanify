@@ -16,7 +16,7 @@ export async function visitAllIdentifiers(code: string, visitor: Visitor) {
   }
 
   while (true) {
-    const smallestScope = await findIdentifierWithSmallestScopeNotVisited(
+    const smallestScope = await findIdentifierWithLargestScopeNotVisited(
       ast,
       visited
     );
@@ -41,7 +41,7 @@ export async function visitAllIdentifiers(code: string, visitor: Visitor) {
   return stringified?.code;
 }
 
-function findIdentifierWithSmallestScopeNotVisited(
+function findIdentifierWithLargestScopeNotVisited(
   node: Node,
   visited: Set<string>
 ) {

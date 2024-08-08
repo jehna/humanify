@@ -164,7 +164,7 @@ function foo() {
   ]);
 });
 
-test("scopes are renamed from smallest to largest", async () => {
+test("scopes are renamed from largest to smallest", async () => {
   const code = `
 function foo() {
   function bar() {
@@ -179,7 +179,7 @@ function foo() {
     names.push(name);
     return name;
   });
-  assert.deepEqual(names, ["qux", "baz", "bar", "foo"]);
+  assert.deepEqual(names, ["foo", "bar", "baz", "qux"]);
 });
 
 test("should rename each variable only once", async () => {
@@ -203,7 +203,7 @@ function a(e, t) {
     names.push(name);
     return name + "_changed";
   });
-  assert.deepEqual(names, ["i", "n", "r", "t", "e", "a"]);
+  assert.deepEqual(names, ["a", "e", "t", "n", "r", "i"]);
 });
 
 test("should have a scope from where the variable was declared", async () => {
