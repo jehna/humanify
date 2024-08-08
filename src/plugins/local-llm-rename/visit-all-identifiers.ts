@@ -1,6 +1,6 @@
 import { parseAsync, transformFromAstAsync, NodePath } from "@babel/core";
 import babelTraverse from "@babel/traverse";
-import { Identifier, isMemberExpression, isMethod, Node } from "@babel/types";
+import { Identifier, Node } from "@babel/types";
 
 const CONTEXT_WINDOW_SIZE = 200;
 
