@@ -2,9 +2,6 @@ import assert from "assert";
 import test from "node:test";
 import { visitAllIdentifiers } from "./visit-all-identifiers.js";
 
-const BABEL_SUPPORTS_RENAMING_CLASS_METHODS =
-  false; /* Babel seems to not support class method renames at the moment */
-
 test("no-op returns the same code", async () => {
   const code = `const a = 1;`;
   assert.equal(code, await visitAllIdentifiers(code, async (name) => name));
@@ -34,7 +31,7 @@ const b = 1;
   assert.equal(expected, await visitAllIdentifiers(code, async () => "b"));
 });
 
-test("renames two scopes, starting from smalles scope to largest", async () => {
+test("renames two scopes, starting from largest scope to smallest", async () => {
   const code = `
 const a = 1;
 (function () {
@@ -42,13 +39,13 @@ const a = 1;
 });
   `.trim();
   const expected = `
-const b = 1;
+const c = 1;
 (function () {
-  const c = 2;
+  const d = 2;
 });
   `.trim();
   let i = 0;
-  const result = await visitAllIdentifiers(code, async () => ["c", "b"][i++]);
+  const result = await visitAllIdentifiers(code, async () => ["c", "d"][i++]);
   assert.equal(expected, result);
 });
 
@@ -60,64 +57,31 @@ const a = 1;
 });
     `.trim();
   const expected = `
-const b = 1;
+const c = 1;
 (function () {
-  const c = 2;
+  const d = 2;
 });
     `.trim();
   let i = 0;
-  const result = await visitAllIdentifiers(code, async () => ["c", "b"][i++]);
+  const result = await visitAllIdentifiers(code, async () => ["c", "d"][i++]);
   assert.equal(expected, result);
 });
 
-test(
-  "a variable in a class method should have a context of the class method",
-  { skip: !BABEL_SUPPORTS_RENAMING_CLASS_METHODS },
-  async () => {
-    const code = `
-class Foo {
-  bar() {
-    const a = 1;
-  }
-}
-    `.trim();
-
-    let asserted = false;
-    await visitAllIdentifiers(code, async (name, scope) => {
-      if (name === "a") {
-        assert.equal(scope, "bar() {\n  const a = 1;\n}");
-        asserted = true;
-      }
-      return name;
-    });
-
-    assert.ok(asserted);
-  }
-);
-
-test(
-  `renames a class method`,
-  {
-    skip: !BABEL_SUPPORTS_RENAMING_CLASS_METHODS
-  },
-  async () => {
-    const code = `
+test(`does not rename class methods`, async () => {
+  const code = `
 class Foo {
   bar() {}
 }
     `.trim();
-    const expected = `
-class Foo {
-  baz() {}
+  const expected = `
+class _Foo {
+  bar() {}
 }`.trim();
-    assert.equal(
-      await visitAllIdentifiers(code, async (name) =>
-        name.replace("bar", "baz")
-      ),
-      expected
-    );
-  }
-);
+  assert.equal(
+    await visitAllIdentifiers(code, async (name) => "_" + name),
+    expected
+  );
+});
 
 test("passes surrounding scope as an argument", async () => {
   const code = `
@@ -140,26 +104,26 @@ function foo() {
     return name + "_changed";
   });
   assert.deepEqual(varnameScopeTuples, [
-    ["Bar", "class Bar {\n  baz = 3;\n  hello() {\n    const y = 123;\n  }\n}"],
     [
-      "b",
-      "function foo() {\n  const b = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}"
+      "a",
+      "const a = 1;\nfunction foo() {\n  const b = 2;\n  class Bar {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}\n;"
     ],
     [
       "foo",
-      "function foo() {\n  const b_changed = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}"
+      "function foo() {\n  const b = 2;\n  class Bar {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}"
+    ],
+    [
+      "b",
+      "function foo_changed() {\n  const b = 2;\n  class Bar {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}"
+    ],
+    ["Bar", "class Bar {\n  baz = 3;\n  hello() {\n    const y = 123;\n  }\n}"],
+    [
+      "baz",
+      "const a_changed = 1;\nfunction foo_changed() {\n  const b_changed = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}\n;"
     ],
     [
       "hello",
-      "const a = 1;\nfunction foo_changed() {\n  const b_changed = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}\n;"
-    ],
-    [
-      "baz",
-      "const a = 1;\nfunction foo_changed() {\n  const b_changed = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}\n;"
-    ],
-    [
-      "a",
-      "const a = 1;\nfunction foo_changed() {\n  const b_changed = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}\n;"
+      "const a_changed = 1;\nfunction foo_changed() {\n  const b_changed = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}\n;"
     ]
   ]);
 });
@@ -198,8 +162,7 @@ function a(e, t) {
   return n;
 }`.trim();
   const names: string[] = [];
-  await visitAllIdentifiers(code, async (name, scope) => {
-    console.log(name, scope);
+  await visitAllIdentifiers(code, async (name) => {
     names.push(name);
     return name + "_changed";
   });
