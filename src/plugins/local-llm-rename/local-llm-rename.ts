@@ -1,4 +1,4 @@
-import { isReservedWord } from "../../is-reserved-word.js";
+import { isValidIdentifier } from "@babel/types";
 import { defineFilename } from "./define-filename.js";
 import { Prompt } from "./llama.js";
 import { unminifyVariableName } from "./unminify-variable-name.js";
@@ -21,7 +21,8 @@ export const localReanme = (prompt: Prompt) => {
         filename,
         surroundingCode
       );
-      let safeRenamed = isReservedWord(renamed) ? `_${renamed}` : renamed;
+
+      let safeRenamed = isValidIdentifier(renamed) ? `_${renamed}` : renamed;
       while (renames.includes(safeRenamed)) {
         safeRenamed = `_${safeRenamed}`;
       }
