@@ -226,3 +226,28 @@ function foo() {
   });
   assert.equal(scope, code);
 });
+
+test("should not rename object properties", async () => {
+  const code = `
+const c = 2;
+const a = {
+  b: c
+};
+a.b;
+  `.trim();
+  const expected = `
+const d = 2;
+const e = {
+  b: d
+};
+e.b;
+  `.trim();
+  assert.equal(
+    expected,
+    await visitAllIdentifiers(code, async (name) => {
+      if (name === "c") return "d";
+      if (name === "a") return "e";
+      return "_" + name;
+    })
+  );
+});
