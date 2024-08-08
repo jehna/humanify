@@ -19,7 +19,11 @@ export async function humanify(...argv: string[]) {
       if (process.exitCode === 0) {
         resolve(undefined);
       } else {
-        reject(new Error(`Process exited with code ${process.exitCode}`));
+        reject(
+          new Error(
+            `Process exited with code ${process.exitCode}, stderr: ${stderr.join("")}, stdout: ${stdout.join("")}`
+          )
+        );
       }
     })
   );

@@ -1,10 +1,8 @@
 import { parseAsync, transformFromAstAsync, NodePath } from "@babel/core";
-import babelTraverse from "@babel/traverse";
+import traverse from "@babel/traverse";
 import { Identifier, isValidIdentifier, Node } from "@babel/types";
 
 const CONTEXT_WINDOW_SIZE = 200;
-
-const traverse = babelTraverse.default; // How does one import a callble default export?
 
 type Visitor = (name: string, scope: string) => Promise<string>;
 

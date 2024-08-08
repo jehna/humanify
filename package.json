@@ -6,9 +6,9 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "build": "pkgroll",
-    "test": "npm run build && npm run test:unit && npm run test:e2e && npm run test:llm",
+    "test": "npm run test:unit && npm run test:e2e && npm run test:llm",
     "test:unit": "find src -name '*.test.ts' | xargs tsx --test",
-    "test:e2e": "find src -name '*.e2etest.ts' | xargs tsx --test",
+    "test:e2e": "npm run build && find src -name '*.e2etest.ts' | xargs tsx --test --test-concurrency=1",
     "test:llm": "find src -name '*.llmtest.ts' | xargs tsx --test --test-concurrency=1",
     "lint": "npm run lint:prettier && npm run lint:eslint",
     "lint:prettier": "prettier --check src/* src/**/*",

@@ -1,13 +1,9 @@
 import test from "node:test";
-import { llama } from "./llama.js";
 import { unminifyVariableName } from "./unminify-variable-name.js";
 import { assertMatches } from "../../test-utils.js";
-import { DEFAULT_MODEL, getEnsuredModelPath } from "../../local-models.js";
+import { testPrompt } from "../../test/test-prompt.js";
 
-const prompt = await llama({
-  seed: 1,
-  modelPath: getEnsuredModelPath(process.env["MODEL"] ?? DEFAULT_MODEL)
-});
+const prompt = await testPrompt();
 
 test("Unminifies a function name", async () => {
   const result = await unminifyVariableName(
