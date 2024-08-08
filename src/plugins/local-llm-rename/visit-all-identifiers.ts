@@ -49,10 +49,8 @@ function findIdentifierWithLargestScopeNotVisited(
   let resultSize = Infinity;
 
   traverse(node, {
-    Identifier(path) {
+    BindingIdentifier(path) {
       if (hasVisited(path, visited)) return;
-      if (isMethod(path.scope.block)) return; // Babel seems to not be supporting method renames at the moment
-      if (isMemberExpression(path.parent)) return; // This is a method call, not a variable
 
       if (!result) {
         result = path;

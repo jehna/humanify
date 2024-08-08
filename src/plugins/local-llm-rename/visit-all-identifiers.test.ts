@@ -117,14 +117,7 @@ function foo() {
       "function foo_changed() {\n  const b = 2;\n  class Bar {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}"
     ],
     ["Bar", "class Bar {\n  baz = 3;\n  hello() {\n    const y = 123;\n  }\n}"],
-    [
-      "baz",
-      "const a_changed = 1;\nfunction foo_changed() {\n  const b_changed = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}\n;"
-    ],
-    [
-      "hello",
-      "const a_changed = 1;\nfunction foo_changed() {\n  const b_changed = 2;\n  class Bar_changed {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n}\n;"
-    ]
+    ["y", "hello() {\n  const y = 123;\n}"]
   ]);
 });
 
