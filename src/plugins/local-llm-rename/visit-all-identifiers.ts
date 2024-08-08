@@ -1,6 +1,6 @@
 import { parseAsync, transformFromAstAsync, NodePath } from "@babel/core";
 import babelTraverse from "@babel/traverse";
-import { Identifier, Node } from "@babel/types";
+import { Identifier, isValidIdentifier, Node } from "@babel/types";
 
 const CONTEXT_WINDOW_SIZE = 200;
 
@@ -11,6 +11,7 @@ type Visitor = (name: string, scope: string) => Promise<string>;
 export async function visitAllIdentifiers(code: string, visitor: Visitor) {
   const ast = await parseAsync(code);
   const visited = new Set<string>();
+  const renames = new Set<string>();
   if (!ast) {
     throw new Error("Failed to parse code");
   }
@@ -30,7 +31,14 @@ export async function visitAllIdentifiers(code: string, visitor: Visitor) {
 
     const surroundingCode = await scopeToString(smallestScope);
     const renamed = await visitor(smallestScopeNode.name, surroundingCode);
-    smallestScope.scope.rename(smallestScopeNode.name, renamed);
+
+    let safeRenamed = isValidIdentifier(renamed) ? renamed : `_${renamed}`;
+    while (renames.has(safeRenamed)) {
+      safeRenamed = `_${safeRenamed}`;
+    }
+    renames.add(safeRenamed);
+
+    smallestScope.scope.rename(smallestScopeNode.name, safeRenamed);
     markVisited(smallestScope, smallestScopeNode.name, visited);
   }
 

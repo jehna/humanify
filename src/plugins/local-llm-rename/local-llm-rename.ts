@@ -1,4 +1,3 @@
-import { isValidIdentifier } from "@babel/types";
 import { defineFilename } from "./define-filename.js";
 import { Prompt } from "./llama.js";
 import { unminifyVariableName } from "./unminify-variable-name.js";
@@ -13,21 +12,8 @@ export const localReanme = (prompt: Prompt) => {
       code.slice(0, PADDING_CHARS * 2)
     );
 
-    const renames: string[] = [];
-    return await visitAllIdentifiers(code, async (name, surroundingCode) => {
-      const renamed = await unminifyVariableName(
-        prompt,
-        name,
-        filename,
-        surroundingCode
-      );
-
-      let safeRenamed = isValidIdentifier(renamed) ? `_${renamed}` : renamed;
-      while (renames.includes(safeRenamed)) {
-        safeRenamed = `_${safeRenamed}`;
-      }
-      renames.push(safeRenamed);
-      return safeRenamed;
-    });
+    return await visitAllIdentifiers(code, (name, surroundingCode) =>
+      unminifyVariableName(prompt, name, filename, surroundingCode)
+    );
   };
 };

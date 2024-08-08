@@ -29,6 +29,7 @@
     "babel-plugin-transform-beautifier": "^0.1.0",
     "commander": "^12.1.0",
     "node-llama-cpp": "^3.0.0-beta.40",
+    "openai": "^4.55.1",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4",
     "webcrack": "^2.13.0"
