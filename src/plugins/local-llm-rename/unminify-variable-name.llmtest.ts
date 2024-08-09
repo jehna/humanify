@@ -12,7 +12,7 @@ test("Unminifies a function name", async () => {
     "math-utils.js",
     "const a = b => b + 1;"
   );
-  assertMatches(result, ["increment", "addOne"]);
+  assertMatches(result, ["increment", "addOne", "incrementBy1"]);
 });
 
 test("Unminifies an argument", async () => {
@@ -22,5 +22,12 @@ test("Unminifies an argument", async () => {
     "math-utils.js",
     "const addOne = b => b + 1;"
   );
-  assertMatches(result, ["num", "number", "val", "value", "accumulator"]);
+  assertMatches(result, [
+    "num",
+    "number",
+    "val",
+    "value",
+    "accumulator",
+    "increment"
+  ]);
 });

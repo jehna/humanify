@@ -1,11 +1,5 @@
-import {
-  getLlama,
-  JinjaTemplateChatWrapper,
-  LlamaChatSession,
-  LlamaGrammar
-} from "node-llama-cpp";
+import { getLlama, LlamaChatSession, LlamaGrammar } from "node-llama-cpp";
 import { Gbnf } from "./gbnf.js";
-import { phiJinjaTemplate } from "./phi-jinja-template.js";
 
 export type Prompt = (
   systemPrompt: string,
@@ -30,7 +24,6 @@ export async function llama(opts: {
     const session = new LlamaChatSession({
       contextSequence: context.getSequence(),
       autoDisposeSequence: true,
-      chatWrapper: new JinjaTemplateChatWrapper({ template: phiJinjaTemplate }),
       systemPrompt
     });
     const response = await session.promptWithMeta(userPrompt, {
