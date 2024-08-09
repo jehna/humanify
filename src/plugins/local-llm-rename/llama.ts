@@ -16,10 +16,12 @@ export type Prompt = (
 export async function llama(opts: {
   seed?: number;
   modelPath: string;
+  disableGPU?: boolean;
 }): Promise<Prompt> {
   const llama = await getLlama();
   const model = await llama.loadModel({
-    modelPath: opts?.modelPath
+    modelPath: opts?.modelPath,
+    gpuLayers: opts?.disableGPU ? 0 : undefined
   });
 
   const context = await model.createContext({ seed: opts?.seed });

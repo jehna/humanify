@@ -6,7 +6,8 @@ import { defineFilename } from "./define-filename.js";
 
 const prompt = await llama({
   seed: 1,
-  modelPath: getEnsuredModelPath(process.env["MODEL"] ?? DEFAULT_MODEL)
+  modelPath: getEnsuredModelPath(process.env["MODEL"] ?? DEFAULT_MODEL),
+  disableGPU: process.env["CI"] === "true"
 });
 
 test("Defines a good name for a file with a function", async () => {
