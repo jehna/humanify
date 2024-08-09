@@ -1,5 +1,5 @@
 import test from "node:test";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { testPrompt } from "./test-prompt.js";
 import { gbnf } from "../plugins/local-llm-rename/gbnf.js";
 import assert from "node:assert";
@@ -8,7 +8,7 @@ import { humanify } from "../test-utils.js";
 const TEST_OUTPUT_DIR = "test-output";
 
 test.afterEach(async () => {
-  //await rm(TEST_OUTPUT_DIR, { recursive: true, force: true });
+  await rm(TEST_OUTPUT_DIR, { recursive: true, force: true });
 });
 
 test("Unminifies an example file successfully", async () => {
