@@ -1,6 +1,12 @@
 name: Manually run OpenAI tests
 
-on: pull_request
+on:
+  pull_request:
+    types:
+      - labeled
+      - opened
+      - reopened
+      - synchronize
 
 jobs:
   test-openai:
@@ -24,6 +30,6 @@ jobs:
       - run: npm install --ci
       - run: npm run build
       - run: npm run download-ci-model
-      - run: npm test:openai
+      - run: npm run test:openai
         env:
           OPENAI_API_KEY: ${{secrets.OPENAI_API_KEY}}
