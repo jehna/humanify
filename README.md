@@ -1,4 +1,4 @@
-# Humanify
+# HumanifyJS
 > Deobfuscate Javascript code using LLMs ("AI")
 
 This tool uses large language modeles (like ChatGPT & llama) and other tools to
@@ -57,10 +57,10 @@ accurate and not possible with your existing hardware.
 
 ### Installation
 
-The fastest way to use the tool is to run it using `npx`:
+The fastest way to try out the tool is to run it using `npx`:
 
 ```
-npx humanify
+npx humanifyjs
 ```
 
 This will download the tool and run it locally. If you want to install the tool
