@@ -7,6 +7,8 @@ export type Prompt = (
   responseGrammar: Gbnf
 ) => Promise<string>;
 
+const IS_CI = process.env["CI"] === "true";
+
 export async function llama(opts: {
   seed?: number;
   modelPath: string;
@@ -15,7 +17,7 @@ export async function llama(opts: {
   const llama = await getLlama();
   const model = await llama.loadModel({
     modelPath: opts?.modelPath,
-    gpuLayers: opts?.disableGPU ? 0 : undefined
+    gpuLayers: (opts?.disableGPU ?? IS_CI) ? 0 : undefined
   });
 
   const context = await model.createContext({ seed: opts?.seed });
