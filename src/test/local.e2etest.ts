@@ -14,14 +14,14 @@ test.afterEach(async () => {
 test("Unminifies an example file successfully", async () => {
   await humanify(
     "local",
-    "src/test/fixtures/example.min.js",
+    "fixtures/example.min.js",
     "--verbose",
     "--outputDir",
     TEST_OUTPUT_DIR
   );
   // For debugging:
   /*await cp(
-    "src/test/fixtures/example.min.js",
+    "fixtures/example.min.js",
     `${TEST_OUTPUT_DIR}/deobfuscated.js`
   );*/
   const result = await readFile(`${TEST_OUTPUT_DIR}/deobfuscated.js`, "utf-8");
