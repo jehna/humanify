@@ -10,7 +10,7 @@ jobs:
         id: cache-model
         uses: actions/cache@v4
         with:
-          path: models/
+          path: /Users/runner/.humanifyjs/models/
           key: models-phi
       - uses: actions/setup-node@v4
         with:

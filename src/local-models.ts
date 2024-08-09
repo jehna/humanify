@@ -6,8 +6,10 @@ import { finished } from "stream/promises";
 import { url } from "./url.js";
 import { showProgress } from "./progress.js";
 import { err } from "./cli-error.js";
+import { homedir } from "os";
+import { join } from "path";
 
-const MODEL_DIRECTORY = "models";
+const MODEL_DIRECTORY = join(homedir(), ".humanifyjs", "models");
 
 export const MODELS: { [modelName: string]: URL } = {
   "2gb": url`https://huggingface.co/bartowski/Phi-3.1-mini-4k-instruct-GGUF/resolve/main/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf?download=true`

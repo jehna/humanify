@@ -19,7 +19,7 @@ jobs:
         id: cache-model
         uses: actions/cache@v4
         with:
-          path: models/
+          path: /Users/runner/.humanifyjs/models/
           key: models-phi
       - name: Checkout code
         uses: actions/checkout@v3
