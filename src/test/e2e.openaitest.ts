@@ -33,7 +33,7 @@ test("Unminifies an example file successfully", async () => {
   );
 
   await humanify(
-    "local",
+    "openai",
     "fixtures/example.min.js",
     "--verbose",
     "--outputDir",

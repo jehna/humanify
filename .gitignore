@@ -1,3 +1,5 @@
 models
 output
 dist
+test-output
+.env

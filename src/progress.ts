@@ -7,7 +7,7 @@ export function showProgress(stream: Readable) {
   stream.on("data", (data) => {
     if (i++ % 1000 !== 0) return;
     bytes += data.length;
-    process.stdout.clearLine(0);
+    process.stdout.clearLine?.(0);
     process.stdout.write(`\rDownloaded ${formatBytes(bytes)}`);
   });
 }
@@ -25,7 +25,7 @@ function formatBytes(numBytes: number) {
 export function showPercentage(percentage: number) {
   const percentageStr = Math.round(percentage * 100);
   if (!verbose.enabled) {
-    process.stdout.clearLine(0);
+    process.stdout.clearLine?.(0);
     process.stdout.cursorTo(0);
     process.stdout.write(`Processing: ${percentageStr}%`);
   } else {

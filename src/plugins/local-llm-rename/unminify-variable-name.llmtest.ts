@@ -22,5 +22,5 @@ test("Unminifies an argument", async () => {
     "math-utils.js",
     "const addOne = b => b + 1;"
   );
-  assertMatches(result, ["num", "number", "val", "value", "accumulator"]);
+  assertMatches(result, ["num", "val", "accumulator", "increment"]);
 });

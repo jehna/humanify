@@ -1,11 +1,5 @@
-import {
-  getLlama,
-  JinjaTemplateChatWrapper,
-  LlamaChatSession,
-  LlamaGrammar
-} from "node-llama-cpp";
+import { getLlama, LlamaChatSession, LlamaGrammar } from "node-llama-cpp";
 import { Gbnf } from "./gbnf.js";
-import { phiJinjaTemplate } from "./phi-jinja-template.js";
 
 export type Prompt = (
   systemPrompt: string,
@@ -13,13 +7,17 @@ export type Prompt = (
   responseGrammar: Gbnf
 ) => Promise<string>;
 
+const IS_CI = process.env["CI"] === "true";
+
 export async function llama(opts: {
   seed?: number;
   modelPath: string;
+  disableGPU?: boolean;
 }): Promise<Prompt> {
   const llama = await getLlama();
   const model = await llama.loadModel({
-    modelPath: opts?.modelPath
+    modelPath: opts?.modelPath,
+    gpuLayers: (opts?.disableGPU ?? IS_CI) ? 0 : undefined
   });
 
   const context = await model.createContext({ seed: opts?.seed });
@@ -28,7 +26,6 @@ export async function llama(opts: {
     const session = new LlamaChatSession({
       contextSequence: context.getSequence(),
       autoDisposeSequence: true,
-      chatWrapper: new JinjaTemplateChatWrapper({ template: phiJinjaTemplate }),
       systemPrompt
     });
     const response = await session.promptWithMeta(userPrompt, {

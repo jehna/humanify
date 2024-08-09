@@ -42,7 +42,7 @@ export async function downloadModel(model: string) {
   showProgress(readStream);
   await finished(readStream.pipe(fileStream));
   await fs.rename(tmpPath, path);
-  process.stdout.clearLine(0);
+  process.stdout.clearLine?.(0);
   console.log(`Model "${model}" downloaded to ${path}`);
 }
 

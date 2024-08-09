@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import { ensureFileExists } from "./file-utils.js";
 import { webcrack } from "./plugins/webcrack.js";
+import { verbose } from "./verbose.js";
 
 export async function unminify(
   filename: string,
@@ -17,6 +18,9 @@ export async function unminify(
       (p, next) => p.then(next),
       Promise.resolve(code)
     );
+
+    verbose.log("Input: ", code);
+    verbose.log("Output: ", formattedCode);
 
     await fs.writeFile(file.path, formattedCode);
   }

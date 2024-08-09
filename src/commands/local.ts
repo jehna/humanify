@@ -13,6 +13,11 @@ export const local = cli()
   .showHelpAfterError(true)
   .option("-m, --model <model>", "The model to use", DEFAULT_MODEL)
   .option("-o, --outputDir <output>", "The output directory", "output")
+  .option(
+    "-s, --seed <seed>",
+    "Seed for the model to get reproduceable results (leave out for random seed)"
+  )
+  .option("--disableGpu", "Disable GPU acceleration")
   .option("--verbose", "Show verbose output")
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
@@ -20,7 +25,11 @@ export const local = cli()
       verbose.enabled = true;
     }
 
-    const prompt = await llama({ modelPath: getEnsuredModelPath(opts.model) });
+    const prompt = await llama({
+      modelPath: getEnsuredModelPath(opts.model),
+      disableGPU: opts.disableGPU,
+      seed: opts.seed ? parseInt(opts.seed) : undefined
+    });
     await unminify(filename, opts.outputDir, [
       babel,
       localReanme(prompt),

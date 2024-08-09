@@ -8,7 +8,7 @@ export const verbose = {
       console.log(`[${timestamp}] `, ...args);
     }
   },
-  enabled: false
+  enabled: process.env["CI"] === "true"
 };
 
 type ConsoleLogArgs = Parameters<typeof console.log>;

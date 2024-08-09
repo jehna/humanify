@@ -2,7 +2,11 @@ import { parseAsync, transformFromAstAsync, NodePath } from "@babel/core";
 import * as babelTraverse from "@babel/traverse";
 import { Identifier, isValidIdentifier, Node } from "@babel/types";
 
-const traverse = babelTraverse.default.default;
+const traverse: typeof babelTraverse.default.default = (
+  typeof babelTraverse.default === "function"
+    ? babelTraverse.default
+    : babelTraverse.default.default
+) as any; // eslint-disable-line @typescript-eslint/no-explicit-any -- This hack is because pkgroll fucks up the import somehow
 
 const CONTEXT_WINDOW_SIZE = 200;
 
