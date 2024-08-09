@@ -12,6 +12,26 @@ test.afterEach(async () => {
 });
 
 test("Unminifies an example file successfully", async () => {
+  const fileIsMinified = async (filename: string) => {
+    const prompt = await testPrompt();
+    return await prompt(
+      `Your job is to read the following code and rate it's readabillity and variable names. Answer "EXCELLENT", "GOOD" or "UNREADABLE".`,
+      await readFile(filename, "utf-8"),
+      gbnf`${/("EXCELLENT" | "GOOD" | "UNREADABLE") [^.]+/}.`
+    );
+  };
+  const expectStartsWith = (expected: string[], actual: string) => {
+    assert(
+      expected.some((e) => actual.startsWith(e)),
+      `Expected "${expected}" but got ${actual}`
+    );
+  };
+
+  await expectStartsWith(
+    ["UNREADABLE"],
+    await fileIsMinified(`fixtures/example.min.js`)
+  );
+
   await humanify(
     "local",
     "fixtures/example.min.js",
@@ -19,19 +39,9 @@ test("Unminifies an example file successfully", async () => {
     "--outputDir",
     TEST_OUTPUT_DIR
   );
-  // For debugging:
-  /*await cp(
-    "fixtures/example.min.js",
-    `${TEST_OUTPUT_DIR}/deobfuscated.js`
-  );*/
-  const result = await readFile(`${TEST_OUTPUT_DIR}/deobfuscated.js`, "utf-8");
-  const prompt = await testPrompt();
-  assert.equal(
-    await prompt(
-      `Does this code look easy to read? Answer "YES" or "NO"`,
-      result,
-      gbnf`${/("YES" | "NO")/}, this code is`
-    ),
-    "YES"
+
+  await expectStartsWith(
+    ["EXCELLENT", "GOOD"],
+    await fileIsMinified(`${TEST_OUTPUT_DIR}/deobfuscated.js`)
   );
 });
