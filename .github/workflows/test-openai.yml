@@ -1,0 +1,29 @@
+name: Manually run OpenAI tests
+
+on: pull_request
+
+jobs:
+  test-openai:
+    name: Run tests
+    runs-on: macos-latest
+    if: contains(github.event.pull_request.labels.*.name, 'test-openai')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache test model
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: models/
+          key: models-phi
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+      - run: npm install --ci
+      - run: npm run build
+      - run: npm run download-ci-model
+      - run: npm test:openai
+        env:
+          OPENAI_API_KEY: ${{secrets.OPENAI_API_KEY}}
