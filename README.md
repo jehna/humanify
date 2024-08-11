@@ -9,7 +9,7 @@ to ensure code stays 1-1 equivalent.
 
 ### Version 2 is out! 🎉
 
-Highlights:
+v2 highlights compared to v1:
 * Python not required anymore!
 * A lot of tests, the codebase is actually maintanable now
 * Renewed CLI tool `humanify` installable via npm
