@@ -19,7 +19,7 @@ jobs:
             gh pr view "$PR_URL" --json statusCheckRollup --jq '.statusCheckRollup | map(select(.name != "dependabot")) | map(select(.status != "COMPLETED") | select(.status != "") | select(.status != null)).[]'
           }
           function get_failed_jobs() {
-            gh pr view "$PR_URL" --json statusCheckRollup --jq '.statusCheckRollup | map(select(.name != "dependabot")) | map(select(.conclusion != "SUCCESS") | select(.conclusion != "NEUTRAL") | select(.conclusion != "") | select(.conclusion != null)).[]'
+            gh pr view "$PR_URL" --json statusCheckRollup --jq '.statusCheckRollup | map(select(.name != "dependabot")) | map(select(.conclusion != "SUCCESS") | select(.conclusion != "NEUTRAL") | select(.conclusion != "SKIPPED") | select(.conclusion != "") | select(.conclusion != null)).[]'
           }
           function wait_until_completed() {
             while [[ $(get_pending_jobs) ]]
