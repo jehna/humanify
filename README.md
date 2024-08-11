@@ -7,6 +7,13 @@ that LLMs don't perform any structural changes – they only provide hints to
 rename variables and functions. The heavy lifting is done by Babel on AST level
 to ensure code stays 1-1 equivalent.
 
+### Version 2 is out! 🎉
+
+Highlights:
+* Python not required anymore!
+* A lot of tests, the codebase is actually maintanable now
+* Renewed CLI tool `humanify` installable via npm
+
 ### ➡️ Check out the [introduction blog post][blogpost] for in-depth explanation!
 
 [blogpost]: https://thejunkland.com/blog/using-llms-to-reverse-javascript-minification
