@@ -64,24 +64,31 @@ accurate and not possible with your existing hardware.
 
 ### Installation
 
-The fastest way to try out the tool is to run it using `npx`:
+Prerequisites:
+* Node.js >=20
 
-```
-npx humanifyjs
-```
-
-This will download the tool and run it locally. If you want to install the tool
-globally, you can do so with:
+The preferred whay to install the tool is via npm:
 
 ```shell
 npm install -g humanifyjs
 ```
 
-After the installation is done, you should be able to run the tool globally:
+This installs the tool to your machine globally. After the installation is done,
+you should be able to run the tool via:
 
 ```shell
 humanify
 ```
+
+If you want to try it out before installing, you can run it using `npx`:
+
+```
+npx humanifyjs
+```
+
+This will download the tool and run it locally. Note that all examples here
+expect the tool to be installed globally, but they should work by replacing
+`humanify` with `npx humanifyjs` as well.
 
 ### Usage
 
@@ -97,8 +104,7 @@ nutshell:
   * Runs locally
   * Is free
   * Is less accurate
-  * Needs a local GPU with ~8gb RAM (M1 Mac works just fine)
-  * Runs as fast as your GPU does
+  * Runs as fast as your GPU does (it also runs on CPU, but may be very slow)
 
 See instructions below for each option:
 
