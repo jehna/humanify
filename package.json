@@ -42,6 +42,9 @@
   "author": "Jesse Luoto",
   "license": "MIT",
   "dependencies": {
+    "@azure-rest/ai-inference": "^1.0.0-beta.2",
+    "@azure/core-auth": "^1.7.2",
+    "@azure/core-sse": "^2.1.2",
     "@babel/core": "^7.25.2",
     "@babel/types": "^7.25.2",
     "@types/babel__core": "^7.20.5",

@@ -4,6 +4,7 @@ import { download } from "./commands/download.js";
 import { local } from "./commands/local.js";
 import { openai } from "./commands/openai.js";
 import { cli } from "./cli.js";
+import { azure } from "./commands/azure.js";
 
 cli()
   .name("humanify")
@@ -11,5 +12,6 @@ cli()
   .version(version)
   .addCommand(local)
   .addCommand(openai)
+  .addCommand(azure)
   .addCommand(download())
   .parse(process.argv);
