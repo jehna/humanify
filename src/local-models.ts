@@ -15,7 +15,7 @@ const MODEL_DIRECTORY = join(homedir(), ".humanifyjs", "models");
 type ModelDefinition = { url: URL; wrapper?: ChatWrapper };
 
 export const MODELS: { [modelName: string]: ModelDefinition } = {
-  "2gb": {
+  "2b": {
     url: url`https://huggingface.co/bartowski/Phi-3.1-mini-4k-instruct-GGUF/resolve/main/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf?download=true`
   },
   "8b": {

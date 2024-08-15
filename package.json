@@ -15,7 +15,7 @@
     "lint": "npm run lint:prettier && npm run lint:eslint",
     "lint:prettier": "prettier --check src/* src/**/*",
     "lint:eslint": "eslint src/* src/**/*",
-    "download-ci-model": "npx humanify download 2gb"
+    "download-ci-model": "npx humanify download 2b"
   },
   "bin": {
     "humanify": "dist/index.mjs"
