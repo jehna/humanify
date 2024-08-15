@@ -6,7 +6,8 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "build": "pkgroll",
-    "deploy": "npm version patch && npm run build && npm publish && gh release create --generate-notes",
+    "deploy": "npm version patch && npm run build && npm publish && npm run deploy:create-github-release",
+    "deploy:create-github-release": "tar -czvf dist.tar.gz dist && gh release create v$npm_package_version --generate-notes dist.tar.gz",
     "test": "npm run test:unit && npm run test:e2e && npm run test:llm",
     "test:unit": "find src -name '*.test.ts' | xargs tsx --test",
     "test:e2e": "npm run build && find src -name '*.e2etest.ts' | xargs tsx --test --test-concurrency=1",

@@ -3,3 +3,4 @@ output
 dist
 test-output
 .env
+dist.tar.gz
