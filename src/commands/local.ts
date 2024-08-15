@@ -1,6 +1,6 @@
 import { cli } from "../cli.js";
 import { llama } from "../plugins/local-llm-rename/llama.js";
-import { DEFAULT_MODEL, getEnsuredModelPath } from "../local-models.js";
+import { DEFAULT_MODEL } from "../local-models.js";
 import { unminify } from "../unminify.js";
 import prettier from "../plugins/prettier.js";
 import babel from "../plugins/babel/babel.js";
@@ -26,7 +26,7 @@ export const local = cli()
     }
 
     const prompt = await llama({
-      modelPath: getEnsuredModelPath(opts.model),
+      model: opts.model,
       disableGPU: opts.disableGPU,
       seed: opts.seed ? parseInt(opts.seed) : undefined
     });

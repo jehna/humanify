@@ -1,5 +1,6 @@
 import { getLlama, LlamaChatSession, LlamaGrammar } from "node-llama-cpp";
 import { Gbnf } from "./gbnf.js";
+import { getModelPath, getModelWrapper } from "../../local-models.js";
 
 export type Prompt = (
   systemPrompt: string,
@@ -11,12 +12,12 @@ const IS_CI = process.env["CI"] === "true";
 
 export async function llama(opts: {
   seed?: number;
-  modelPath: string;
+  model: string;
   disableGPU?: boolean;
 }): Promise<Prompt> {
   const llama = await getLlama();
   const model = await llama.loadModel({
-    modelPath: opts?.modelPath,
+    modelPath: getModelPath(opts?.model),
     gpuLayers: (opts?.disableGPU ?? IS_CI) ? 0 : undefined
   });
 
@@ -26,7 +27,8 @@ export async function llama(opts: {
     const session = new LlamaChatSession({
       contextSequence: context.getSequence(),
       autoDisposeSequence: true,
-      systemPrompt
+      systemPrompt,
+      chatWrapper: getModelWrapper(opts.model)
     });
     const response = await session.promptWithMeta(userPrompt, {
       temperature: 0.8,
