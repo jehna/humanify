@@ -131,10 +131,10 @@ model is not included in the repository due to its size, but you can download it
 using the following command:
 
 ```shell
-humanify download 2gb
+humanify download 2b
 ```
 
-This downloads the `2gb` model to your local machine. This is only needed to do
+This downloads the `2b` model to your local machine. This is only needed to do
 once. You can also choose to download other models depending on your local
 resources. List the available models using `humanify download`.
 
