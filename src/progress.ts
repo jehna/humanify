@@ -5,8 +5,8 @@ export function showProgress(stream: Readable) {
   let bytes = 0;
   let i = 0;
   stream.on("data", (data) => {
-    if (i++ % 1000 !== 0) return;
     bytes += data.length;
+    if (i++ % 1000 !== 0) return;
     process.stdout.clearLine?.(0);
     process.stdout.write(`\rDownloaded ${formatBytes(bytes)}`);
   });
