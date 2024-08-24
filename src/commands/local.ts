@@ -25,9 +25,11 @@ export const local = cli()
       verbose.enabled = true;
     }
 
+    verbose.log("Starting local inference with options: ", opts);
+
     const prompt = await llama({
       model: opts.model,
-      disableGPU: opts.disableGPU,
+      disableGpu: opts.disableGpu,
       seed: opts.seed ? parseInt(opts.seed) : undefined
     });
     await unminify(filename, opts.outputDir, [

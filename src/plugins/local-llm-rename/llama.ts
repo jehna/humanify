@@ -1,6 +1,12 @@
-import { getLlama, LlamaChatSession, LlamaGrammar } from "node-llama-cpp";
+import {
+  getLlama,
+  LlamaChatSession,
+  LlamaGrammar,
+  LlamaModelOptions
+} from "node-llama-cpp";
 import { Gbnf } from "./gbnf.js";
 import { getModelPath, getModelWrapper } from "../../local-models.js";
+import { verbose } from "../../verbose.js";
 
 export type Prompt = (
   systemPrompt: string,
@@ -13,13 +19,15 @@ const IS_CI = process.env["CI"] === "true";
 export async function llama(opts: {
   seed?: number;
   model: string;
-  disableGPU?: boolean;
+  disableGpu?: boolean;
 }): Promise<Prompt> {
   const llama = await getLlama();
-  const model = await llama.loadModel({
+  const modelOpts: LlamaModelOptions = {
     modelPath: getModelPath(opts?.model),
-    gpuLayers: (opts?.disableGPU ?? IS_CI) ? 0 : undefined
-  });
+    gpuLayers: (opts?.disableGpu ?? IS_CI) ? 0 : undefined
+  };
+  verbose.log("Loading model with options", modelOpts);
+  const model = await llama.loadModel(modelOpts);
 
   const context = await model.createContext({ seed: opts?.seed });
 
