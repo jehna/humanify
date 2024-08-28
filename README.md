@@ -92,10 +92,10 @@ expect the tool to be installed globally, but they should work by replacing
 
 ### Usage
 
-Next you'll need to decide whether to use `openai` or `local` mode. In a
+Next you'll need to decide whether to use `openai`, `gemini` or `local` mode. In a
 nutshell:
 
-* `openai` mode
+* `openai` or `gemini` mode
   * Runs on someone else's computer that's specifically optimized for this kind
     of things
   * Costs money depending on the length of your code
@@ -115,14 +115,25 @@ https://openai.com/.
 
 There are several ways to provide the API key to the tool:
 ```shell
-echo "OPENAI_API_KEY=your-token" > .env && humanify openai obfuscated-file.js
-export OPENAI_API_KEY="your-token" && humanify openai obfuscated-file.js
-OPENAI_TOKEN=your-token humanify openai obfuscated-file.js
-humanify --apiKey="your-token" obfuscated-file.js
+humanify openai --apiKey="your-token" obfuscated-file.js
 ```
 
-Use your preferred way to provide the API key. Use `humanify --help` to see
-all available options.
+Alternatively you can also use an environment variable `OPENAI_API_KEY`. Use
+`humanify --help` to see all available options.
+
+### Gemini mode
+
+You'll need a Google AI Studio key. You can get one by signing up at
+https://aistudio.google.com/.
+
+You need to provice the API key to the tool:
+
+```shell
+humanify gemini --apiKey="your-token" obfuscated-file.js
+```
+
+Alternatively you can also use an environment variable `GEMINI_API_KEY`. Use
+`humanify --help` to see all available options.
 
 ### Local mode
 

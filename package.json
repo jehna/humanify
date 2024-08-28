@@ -16,6 +16,7 @@
     "test:e2e": "npm run build && find src -name '*.e2etest.ts' | xargs tsx --test --test-concurrency=1",
     "test:llm": "find src -name '*.llmtest.ts' | xargs tsx --test --test-concurrency=1",
     "test:openai": "npm run build && find src -name '*.openaitest.ts' | xargs tsx --test",
+    "test:gemini": "npm run build && find src -name '*.geminitest.ts' | xargs tsx --test",
     "lint": "npm run lint:prettier && npm run lint:eslint",
     "lint:prettier": "prettier --check src/* src/**/*",
     "lint:eslint": "eslint src/* src/**/*",
@@ -48,6 +49,7 @@
   "dependencies": {
     "@babel/core": "^7.25.2",
     "@babel/types": "^7.25.2",
+    "@google/generative-ai": "^0.17.1",
     "@types/babel__core": "^7.20.5",
     "babel-plugin-transform-beautifier": "^0.1.0",
     "commander": "^12.1.0",
