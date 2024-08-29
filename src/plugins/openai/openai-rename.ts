@@ -5,12 +5,14 @@ import { verbose } from "../../verbose.js";
 
 export function openaiRename({
   apiKey,
+  baseURL,
   model
 }: {
   apiKey: string;
+  baseURL: string;
   model: string;
 }) {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, baseURL });
 
   return async (code: string): Promise<string> => {
     return await visitAllIdentifiers(
