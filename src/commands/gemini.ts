@@ -8,7 +8,10 @@ import { env } from "../env.js";
 
 export const azure = cli()
   .name("gemini")
-  .description("Use Google Gemini/AIStudio API to unminify code")
+  .description(
+    "Use Google Gemini/AIStudio API to unminify code\n" +
+      "NOTE! This is an experimental feature and may not work as expected."
+  )
   .option("-m, --model <model>", "The model to use", "gemini-1.5-flash")
   .option("-o, --outputDir <output>", "The output directory", "output")
   .option(

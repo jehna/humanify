@@ -135,6 +135,8 @@ humanify gemini --apiKey="your-token" obfuscated-file.js
 Alternatively you can also use an environment variable `GEMINI_API_KEY`. Use
 `humanify --help` to see all available options.
 
+Note: Gemini mode is experimental and may not work as well as OpenAI mode.
+
 ### Local mode
 
 The local mode uses a pre-trained language model to deobfuscate the code. The
