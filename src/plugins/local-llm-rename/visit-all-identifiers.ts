@@ -1,6 +1,6 @@
 import { parseAsync, transformFromAstAsync, NodePath } from "@babel/core";
 import * as babelTraverse from "@babel/traverse";
-import { Identifier, isValidIdentifier, Node } from "@babel/types";
+import { Identifier, toIdentifier, Node } from "@babel/types";
 
 const traverse: typeof babelTraverse.default.default = (
   typeof babelTraverse.default === "function"
@@ -39,7 +39,7 @@ export async function visitAllIdentifiers(
     const surroundingCode = await scopeToString(smallestScope);
     const renamed = await visitor(smallestScopeNode.name, surroundingCode);
 
-    let safeRenamed = isValidIdentifier(renamed) ? renamed : `_${renamed}`;
+    let safeRenamed = toIdentifier(renamed);
     while (renames.has(safeRenamed)) {
       safeRenamed = `_${safeRenamed}`;
     }

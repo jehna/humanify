@@ -207,3 +207,9 @@ e.b;
     })
   );
 });
+
+test("should handle invalid identifiers", async () => {
+  const code = `const a = 1`;
+  const result = await visitAllIdentifiers(code, async () => "this.kLength");
+  assert.equal(result, "const thisKLength = 1;");
+});
