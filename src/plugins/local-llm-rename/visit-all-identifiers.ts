@@ -53,10 +53,10 @@ export async function visitAllIdentifiers(
   onProgress?.(1);
 
   const stringified = await transformFromAstAsync(ast);
-  if (!stringified?.code) {
+  if (stringified?.code == null) {
     throw new Error("Failed to stringify code");
   }
-  return stringified?.code;
+  return stringified.code;
 }
 
 function findScopes(ast: Node): NodePath<Identifier>[] {
