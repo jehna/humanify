@@ -213,3 +213,30 @@ test("should handle invalid identifiers", async () => {
   const result = await visitAllIdentifiers(code, async () => "this.kLength");
   assert.equal(result, "const thisKLength = 1;");
 });
+
+test("should handle space in identifier name (happens for some reason though it shouldn't)", async () => {
+  const code = `const a = 1`;
+  const result = await visitAllIdentifiers(code, async () => "foo bar");
+  assert.equal(result, "const fooBar = 1;");
+});
+
+test("should handle reserved identifiers", async () => {
+  const code = `const a = 1`;
+  const result = await visitAllIdentifiers(code, async () => "static");
+  assert.equal(result, "const _static = 1;");
+});
+
+test("should handle multiple identifiers named the same", async () => {
+  const code = `
+const a = 1;
+const b = 1;
+`.trim();
+  const result = await visitAllIdentifiers(code, async () => "foo");
+  assert.equal(
+    result,
+    `
+const foo = 1;
+const _foo = 1;
+`.trim()
+  );
+});
