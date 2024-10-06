@@ -18,21 +18,19 @@ export async function visitAllIdentifiers(
   onProgress?: (percentageDone: number) => void
 ) {
   const ast = await parseAsync(code);
-  const visited = new Set<string>();
   const renames = new Set<string>();
+  const visited = new Set<string>();
+
   if (!ast) {
     throw new Error("Failed to parse code");
   }
 
-  const numRenamesExpected = countBindingIdentifiers(ast);
-  while (true) {
-    const smallestScope = await findIdentifierWithLargestScopeNotVisited(
-      ast,
-      visited
-    );
-    if (!smallestScope) {
-      break;
-    }
+  const scopes = await findScopes(ast);
+  const numRenamesExpected = scopes.length;
+
+  for (const smallestScope of scopes) {
+    if (hasVisited(smallestScope, visited)) continue;
+
     const smallestScopeNode = smallestScope.node;
     if (smallestScopeNode.type !== "Identifier") {
       throw new Error("No identifiers found");
@@ -61,41 +59,20 @@ export async function visitAllIdentifiers(
   return stringified?.code;
 }
 
-function findIdentifierWithLargestScopeNotVisited(
-  node: Node,
-  visited: Set<string>
-) {
-  let result: NodePath<Identifier> | undefined;
-  let resultSize = Infinity;
-
-  traverse(node, {
+function findScopes(ast: Node): NodePath<Identifier>[] {
+  const scopes: [nodePath: NodePath<Identifier>, scopeSize: number][] = [];
+  traverse(ast, {
     BindingIdentifier(path) {
-      if (hasVisited(path, visited)) return;
-
-      if (!result) {
-        result = path;
-        return;
-      }
-
       const bindingBlock = closestSurroundingContextPath(path).scope.block;
       const pathSize = bindingBlock.end! - bindingBlock.start!;
 
-      result = resultSize > pathSize ? result : path;
-      resultSize = resultSize > pathSize ? resultSize : pathSize;
+      scopes.push([path, pathSize]);
     }
   });
 
-  return result;
-}
+  scopes.sort((a, b) => b[1] - a[1]);
 
-function countBindingIdentifiers(node: Node) {
-  let count = 0;
-  traverse(node, {
-    BindingIdentifier() {
-      count++;
-    }
-  });
-  return count;
+  return scopes.map(([nodePath]) => nodePath);
 }
 
 function hasVisited(path: NodePath<Identifier>, visited: Set<string>) {
