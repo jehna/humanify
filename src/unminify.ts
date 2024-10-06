@@ -17,6 +17,12 @@ export async function unminify(
 
     const file = extractedFiles[i];
     const code = await fs.readFile(file.path, "utf-8");
+
+    if (code.trim().length === 0) {
+      verbose.log(`Skipping empty file ${file.path}`);
+      continue;
+    }
+
     const formattedCode = await plugins.reduce(
       (p, next) => p.then(next),
       Promise.resolve(code)

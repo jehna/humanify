@@ -7,6 +7,11 @@ test("no-op returns the same code", async () => {
   assert.equal(code, await visitAllIdentifiers(code, async (name) => name));
 });
 
+test("no-op returns the same empty code", async () => {
+  const code = "";
+  assert.equal(code, await visitAllIdentifiers(code, async (name) => name));
+});
+
 test("renames a simple variable", async () => {
   const code = `const a = 1;`;
   assert.equal(
