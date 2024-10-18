@@ -33,4 +33,6 @@ export async function unminify(
 
     await fs.writeFile(file.path, formattedCode);
   }
+
+  console.log(`Done! You can find your unminified code in ${outputDir}`);
 }
