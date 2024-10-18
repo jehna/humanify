@@ -6,11 +6,13 @@ import { verbose } from "../../verbose.js";
 export function openaiRename({
   apiKey,
   baseURL,
-  model
+  model,
+  contextWindowSize
 }: {
   apiKey: string;
   baseURL: string;
   model: string;
+  contextWindowSize: number;
 }) {
   const client = new OpenAI({ apiKey, baseURL });
 
@@ -34,6 +36,7 @@ export function openaiRename({
 
         return renamed;
       },
+      contextWindowSize,
       showPercentage
     );
   };

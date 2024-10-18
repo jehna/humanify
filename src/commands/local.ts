@@ -6,6 +6,8 @@ import prettier from "../plugins/prettier.js";
 import babel from "../plugins/babel/babel.js";
 import { localReanme } from "../plugins/local-llm-rename/local-llm-rename.js";
 import { verbose } from "../verbose.js";
+import { DEFAULT_CONTEXT_WINDOW_SIZE } from "./default-args.js";
+import { parseNumber } from "../number-utils.js";
 
 export const local = cli()
   .name("local")
@@ -19,6 +21,11 @@ export const local = cli()
   )
   .option("--disableGpu", "Disable GPU acceleration")
   .option("--verbose", "Show verbose output")
+  .option(
+    "--contextSize",
+    "The context size to use for the LLM",
+    `${DEFAULT_CONTEXT_WINDOW_SIZE}`
+  )
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
     if (opts.verbose) {
@@ -27,6 +34,7 @@ export const local = cli()
 
     verbose.log("Starting local inference with options: ", opts);
 
+    const contextWindowSize = parseNumber(opts.contextSize);
     const prompt = await llama({
       model: opts.model,
       disableGpu: opts.disableGpu,
@@ -34,7 +42,7 @@ export const local = cli()
     });
     await unminify(filename, opts.outputDir, [
       babel,
-      localReanme(prompt),
+      localReanme(prompt, contextWindowSize),
       prettier
     ]);
   });
