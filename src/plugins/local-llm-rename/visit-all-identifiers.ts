@@ -38,14 +38,18 @@ export async function visitAllIdentifiers(
 
     const surroundingCode = await scopeToString(smallestScope);
     const renamed = await visitor(smallestScopeNode.name, surroundingCode);
+    if (renamed !== smallestScopeNode.name) {
+      let safeRenamed = toIdentifier(renamed);
+      while (
+        renames.has(safeRenamed) ||
+        smallestScope.scope.hasBinding(safeRenamed)
+      ) {
+        safeRenamed = `_${safeRenamed}`;
+      }
+      renames.add(safeRenamed);
 
-    let safeRenamed = toIdentifier(renamed);
-    while (renames.has(safeRenamed)) {
-      safeRenamed = `_${safeRenamed}`;
+      smallestScope.scope.rename(smallestScopeNode.name, safeRenamed);
     }
-    renames.add(safeRenamed);
-
-    smallestScope.scope.rename(smallestScopeNode.name, safeRenamed);
     markVisited(smallestScope, smallestScopeNode.name, visited);
 
     onProgress?.(visited.size / numRenamesExpected);

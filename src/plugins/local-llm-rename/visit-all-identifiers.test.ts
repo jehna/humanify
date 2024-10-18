@@ -245,3 +245,18 @@ const _foo = 1;
 `.trim()
   );
 });
+
+test("should handle multiple properties with the same name", async () => {
+  const code = `
+const foo = 1;
+const bar = 2;
+`.trim();
+  const result = await visitAllIdentifiers(code, async () => "bar");
+  assert.equal(
+    result,
+    `
+const _bar = 1;
+const bar = 2;
+`.trim()
+  );
+});
