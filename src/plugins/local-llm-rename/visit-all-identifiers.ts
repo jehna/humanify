@@ -8,13 +8,12 @@ const traverse: typeof babelTraverse.default.default = (
     : babelTraverse.default.default
 ) as any; // eslint-disable-line @typescript-eslint/no-explicit-any -- This hack is because pkgroll fucks up the import somehow
 
-const CONTEXT_WINDOW_SIZE = 200;
-
 type Visitor = (name: string, scope: string) => Promise<string>;
 
 export async function visitAllIdentifiers(
   code: string,
   visitor: Visitor,
+  contextWindowSize: number,
   onProgress?: (percentageDone: number) => void
 ) {
   const ast = await parseAsync(code);
@@ -36,7 +35,10 @@ export async function visitAllIdentifiers(
       throw new Error("No identifiers found");
     }
 
-    const surroundingCode = await scopeToString(smallestScope);
+    const surroundingCode = await scopeToString(
+      smallestScope,
+      contextWindowSize
+    );
     const renamed = await visitor(smallestScopeNode.name, surroundingCode);
     if (renamed !== smallestScopeNode.name) {
       let safeRenamed = toIdentifier(renamed);
@@ -91,28 +93,31 @@ function markVisited(
   visited.add(newName);
 }
 
-async function scopeToString(path: NodePath<Identifier>) {
+async function scopeToString(
+  path: NodePath<Identifier>,
+  contextWindowSize: number
+) {
   const surroundingPath = closestSurroundingContextPath(path);
   const code = `${surroundingPath}`; // Implements a hidden `.toString()`
-  if (code.length < CONTEXT_WINDOW_SIZE) {
+  if (code.length < contextWindowSize) {
     return code;
   }
   if (surroundingPath.isProgram()) {
     const start = path.node.start ?? 0;
     const end = path.node.end ?? code.length;
-    if (end < CONTEXT_WINDOW_SIZE / 2) {
-      return code.slice(0, CONTEXT_WINDOW_SIZE);
+    if (end < contextWindowSize / 2) {
+      return code.slice(0, contextWindowSize);
     }
-    if (start > code.length - CONTEXT_WINDOW_SIZE / 2) {
-      return code.slice(-CONTEXT_WINDOW_SIZE);
+    if (start > code.length - contextWindowSize / 2) {
+      return code.slice(-contextWindowSize);
     }
 
     return code.slice(
-      start - CONTEXT_WINDOW_SIZE / 2,
-      end + CONTEXT_WINDOW_SIZE / 2
+      start - contextWindowSize / 2,
+      end + contextWindowSize / 2
     );
   } else {
-    return code.slice(0, CONTEXT_WINDOW_SIZE);
+    return code.slice(0, contextWindowSize);
   }
 }
 
