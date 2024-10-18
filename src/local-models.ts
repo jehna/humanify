@@ -1,14 +1,13 @@
 import fs from "fs/promises";
-import { createWriteStream, existsSync } from "fs";
+import { existsSync } from "fs";
 import { basename } from "path";
-import { Readable } from "stream";
-import { finished } from "stream/promises";
 import { url } from "./url.js";
-import { showProgress } from "./progress.js";
 import { err } from "./cli-error.js";
 import { homedir } from "os";
 import { join } from "path";
 import { ChatWrapper, Llama3_1ChatWrapper } from "node-llama-cpp";
+import { downloadFile } from "ipull";
+import { verbose } from "./verbose.js";
 
 const MODEL_DIRECTORY = join(homedir(), ".humanifyjs", "models");
 
@@ -49,18 +48,17 @@ export async function downloadModel(model: string) {
     return;
   }
 
-  const response = await fetch(url);
-  if (!response.ok || !response.body) {
-    err(`Failed to download model ${model}`);
-  }
   const tmpPath = `${path}.part`;
-  const fileStream = createWriteStream(tmpPath);
-  const readStream = Readable.fromWeb(response.body);
 
-  showProgress(readStream);
-  await finished(readStream.pipe(fileStream));
+  const downlaoder = await downloadFile({
+    url: url.toString(),
+    savePath: tmpPath,
+    cliProgress: true,
+    cliStyle: verbose.enabled ? "ci" : "auto"
+  });
+  await downlaoder.download();
+
   await fs.rename(tmpPath, path);
-  process.stdout.clearLine?.(0);
   console.log(`Model "${model}" downloaded to ${path}`);
 }
 
