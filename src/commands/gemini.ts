@@ -14,7 +14,7 @@ export const azure = cli()
   .option("-m, --model <model>", "The model to use", "gemini-1.5-flash")
   .option("-o, --outputDir <output>", "The output directory", "output")
   .option(
-    "--contextSize",
+    "--contextSize <contextSize>",
     "The context size to use for the LLM",
     `${DEFAULT_CONTEXT_WINDOW_SIZE}`
   )
