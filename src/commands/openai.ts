@@ -24,7 +24,7 @@ export const openai = cli()
   )
   .option("--verbose", "Show verbose output")
   .option(
-    "--contextSize",
+    "--contextSize <contextSize>",
     "The context size to use for the LLM",
     `${DEFAULT_CONTEXT_WINDOW_SIZE}`
   )
