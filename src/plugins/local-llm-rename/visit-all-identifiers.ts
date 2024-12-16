@@ -16,7 +16,7 @@ export async function visitAllIdentifiers(
   contextWindowSize: number,
   onProgress?: (percentageDone: number) => void
 ) {
-  const ast = await parseAsync(code);
+  const ast = await parseAsync(code, { sourceType: "script" });
   const renames = new Set<string>();
   const visited = new Set<string>();
 
