@@ -298,3 +298,20 @@ const bar = 2;
 `.trim()
   );
 });
+
+test("should not craash to 'arguments' assigning", async () => {
+  const code = `
+function foo() {
+  arguments = '??';
+}
+`.trim();
+  const result = await visitAllIdentifiers(code, async () => "foobar", 200);
+  assert.equal(
+    result,
+    `
+function foobar() {
+  arguments = '??';
+}
+    `.trim()
+  );
+});
