@@ -12,8 +12,17 @@ export async function unminify(
   const bundledCode = await fs.readFile(filename, "utf-8");
   const extractedFiles = await webcrack(bundledCode, outputDir);
 
-  for (const file of extractedFiles) {
+  for (let i = 0; i < extractedFiles.length; i++) {
+    console.log(`Processing file ${i + 1}/${extractedFiles.length}`);
+
+    const file = extractedFiles[i];
     const code = await fs.readFile(file.path, "utf-8");
+
+    if (code.trim().length === 0) {
+      verbose.log(`Skipping empty file ${file.path}`);
+      continue;
+    }
+
     const formattedCode = await plugins.reduce(
       (p, next) => p.then(next),
       Promise.resolve(code)
@@ -24,4 +33,6 @@ export async function unminify(
 
     await fs.writeFile(file.path, formattedCode);
   }
+
+  console.log(`Done! You can find your unminified code in ${outputDir}`);
 }

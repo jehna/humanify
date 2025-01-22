@@ -5,6 +5,8 @@ import babel from "../plugins/babel/babel.js";
 import { openaiRename } from "../plugins/openai/openai-rename.js";
 import { verbose } from "../verbose.js";
 import { env } from "../env.js";
+import { parseNumber } from "../number-utils.js";
+import { DEFAULT_CONTEXT_WINDOW_SIZE } from "./default-args.js";
 
 export const openai = cli()
   .name("openai")
@@ -15,7 +17,17 @@ export const openai = cli()
     "-k, --apiKey <apiKey>",
     "The OpenAI API key. Alternatively use OPENAI_API_KEY environment variable"
   )
+  .option(
+    "--baseURL <baseURL>",
+    "The OpenAI base server URL.",
+    env("OPENAI_BASE_URL") ?? "https://api.openai.com/v1"
+  )
   .option("--verbose", "Show verbose output")
+  .option(
+    "--contextSize <contextSize>",
+    "The context size to use for the LLM",
+    `${DEFAULT_CONTEXT_WINDOW_SIZE}`
+  )
   .argument("input", "The input minified Javascript file")
   .action(async (filename, opts) => {
     if (opts.verbose) {
@@ -23,9 +35,16 @@ export const openai = cli()
     }
 
     const apiKey = opts.apiKey ?? env("OPENAI_API_KEY");
+    const baseURL = opts.baseURL;
+    const contextWindowSize = parseNumber(opts.contextSize);
     await unminify(filename, opts.outputDir, [
       babel,
-      openaiRename({ apiKey, model: opts.model }),
+      openaiRename({
+        apiKey,
+        baseURL,
+        model: opts.model,
+        contextWindowSize
+      }),
       prettier
     ]);
   });

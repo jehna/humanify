@@ -4,14 +4,25 @@ import { visitAllIdentifiers } from "./visit-all-identifiers.js";
 
 test("no-op returns the same code", async () => {
   const code = `const a = 1;`;
-  assert.equal(code, await visitAllIdentifiers(code, async (name) => name));
+  assert.equal(
+    code,
+    await visitAllIdentifiers(code, async (name) => name, 200)
+  );
+});
+
+test("no-op returns the same empty code", async () => {
+  const code = "";
+  assert.equal(
+    code,
+    await visitAllIdentifiers(code, async (name) => name, 200)
+  );
 });
 
 test("renames a simple variable", async () => {
   const code = `const a = 1;`;
   assert.equal(
     `const b = 1;`,
-    await visitAllIdentifiers(code, async () => "b")
+    await visitAllIdentifiers(code, async () => "b", 200)
   );
 });
 
@@ -28,7 +39,7 @@ const b = 1;
   b = 2;
 });
   `.trim();
-  assert.equal(expected, await visitAllIdentifiers(code, async () => "b"));
+  assert.equal(expected, await visitAllIdentifiers(code, async () => "b", 200));
 });
 
 test("renames two scopes, starting from largest scope to smallest", async () => {
@@ -45,7 +56,11 @@ const c = 1;
 });
   `.trim();
   let i = 0;
-  const result = await visitAllIdentifiers(code, async () => ["c", "d"][i++]);
+  const result = await visitAllIdentifiers(
+    code,
+    async () => ["c", "d"][i++],
+    200
+  );
   assert.equal(expected, result);
 });
 
@@ -63,7 +78,11 @@ const c = 1;
 });
     `.trim();
   let i = 0;
-  const result = await visitAllIdentifiers(code, async () => ["c", "d"][i++]);
+  const result = await visitAllIdentifiers(
+    code,
+    async () => ["c", "d"][i++],
+    200
+  );
   assert.equal(expected, result);
 });
 
@@ -78,7 +97,7 @@ class _Foo {
   bar() {}
 }`.trim();
   assert.equal(
-    await visitAllIdentifiers(code, async (name) => "_" + name),
+    await visitAllIdentifiers(code, async (name) => "_" + name, 200),
     expected
   );
 });
@@ -99,10 +118,14 @@ function foo() {
     `.trim();
 
   const varnameScopeTuples: [string, string][] = [];
-  await visitAllIdentifiers(code, async (name, scope) => {
-    varnameScopeTuples.push([name, scope]);
-    return name + "_changed";
-  });
+  await visitAllIdentifiers(
+    code,
+    async (name, scope) => {
+      varnameScopeTuples.push([name, scope]);
+      return name + "_changed";
+    },
+    200
+  );
   assert.deepEqual(varnameScopeTuples, [
     [
       "a",
@@ -132,10 +155,14 @@ function foo() {
   }
 }`.trim();
   const names: string[] = [];
-  await visitAllIdentifiers(code, async (name) => {
-    names.push(name);
-    return name;
-  });
+  await visitAllIdentifiers(
+    code,
+    async (name) => {
+      names.push(name);
+      return name;
+    },
+    200
+  );
   assert.deepEqual(names, ["foo", "bar", "baz", "qux"]);
 });
 
@@ -155,10 +182,14 @@ function a(e, t) {
   return n;
 }`.trim();
   const names: string[] = [];
-  await visitAllIdentifiers(code, async (name) => {
-    names.push(name);
-    return name + "_changed";
-  });
+  await visitAllIdentifiers(
+    code,
+    async (name) => {
+      names.push(name);
+      return name + "_changed";
+    },
+    200
+  );
   assert.deepEqual(names, ["a", "e", "t", "n", "r", "i"]);
 });
 
@@ -174,12 +205,16 @@ function foo() {
 }
   `.trim();
   let scope: string | undefined;
-  await visitAllIdentifiers(code, async (name, surroundingCode) => {
-    if (name === "a") {
-      scope = surroundingCode;
-    }
-    return name;
-  });
+  await visitAllIdentifiers(
+    code,
+    async (name, surroundingCode) => {
+      if (name === "a") {
+        scope = surroundingCode;
+      }
+      return name;
+    },
+    200
+  );
   assert.equal(scope, code);
 });
 
@@ -200,10 +235,83 @@ e.b;
   `.trim();
   assert.equal(
     expected,
-    await visitAllIdentifiers(code, async (name) => {
-      if (name === "c") return "d";
-      if (name === "a") return "e";
-      return "_" + name;
-    })
+    await visitAllIdentifiers(
+      code,
+      async (name) => {
+        if (name === "c") return "d";
+        if (name === "a") return "e";
+        return "_" + name;
+      },
+      200
+    )
+  );
+});
+
+test("should handle invalid identifiers", async () => {
+  const code = `const a = 1`;
+  const result = await visitAllIdentifiers(
+    code,
+    async () => "this.kLength",
+    200
+  );
+  assert.equal(result, "const thisKLength = 1;");
+});
+
+test("should handle space in identifier name (happens for some reason though it shouldn't)", async () => {
+  const code = `const a = 1`;
+  const result = await visitAllIdentifiers(code, async () => "foo bar", 200);
+  assert.equal(result, "const fooBar = 1;");
+});
+
+test("should handle reserved identifiers", async () => {
+  const code = `const a = 1`;
+  const result = await visitAllIdentifiers(code, async () => "static", 200);
+  assert.equal(result, "const _static = 1;");
+});
+
+test("should handle multiple identifiers named the same", async () => {
+  const code = `
+const a = 1;
+const b = 1;
+`.trim();
+  const result = await visitAllIdentifiers(code, async () => "foo", 200);
+  assert.equal(
+    result,
+    `
+const foo = 1;
+const _foo = 1;
+`.trim()
+  );
+});
+
+test("should handle multiple properties with the same name", async () => {
+  const code = `
+const foo = 1;
+const bar = 2;
+`.trim();
+  const result = await visitAllIdentifiers(code, async () => "bar", 200);
+  assert.equal(
+    result,
+    `
+const _bar = 1;
+const bar = 2;
+`.trim()
+  );
+});
+
+test("should not craash to 'arguments' assigning", async () => {
+  const code = `
+function foo() {
+  arguments = '??';
+}
+`.trim();
+  const result = await visitAllIdentifiers(code, async () => "foobar", 200);
+  assert.equal(
+    result,
+    `
+function foobar() {
+  arguments = '??';
+}
+    `.trim()
   );
 });

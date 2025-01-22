@@ -1,6 +1,6 @@
 {
   "name": "humanifyjs",
-  "version": "2.1.1",
+  "version": "2.2.2",
   "description": "",
   "main": "dist/index.mjs",
   "scripts": {
@@ -9,7 +9,7 @@
     "deploy:patch": "npm version patch && npm run deploy:release",
     "deploy:minor": "npm version minor && npm run deploy:release",
     "deploy:major": "npm version major && npm run deploy:release",
-    "deploy:release": " git push --tags && npm run build && npm publish && npm run deploy:create-github-release",
+    "deploy:release": " git push --tags && git push && npm run build && npm publish && npm run deploy:create-github-release",
     "deploy:create-github-release": "tar -czvf dist.tar.gz dist && gh release create v$npm_package_version --generate-notes dist.tar.gz",
     "test": "npm run test:unit && npm run test:e2e && npm run test:llm",
     "test:unit": "find src -name '*.test.ts' | xargs tsx --test",
@@ -49,11 +49,12 @@
   "dependencies": {
     "@babel/core": "^7.25.2",
     "@babel/types": "^7.25.2",
-    "@google/generative-ai": "^0.17.1",
+    "@google/generative-ai": "^0.20.0",
     "@types/babel__core": "^7.20.5",
     "babel-plugin-transform-beautifier": "^0.1.0",
-    "commander": "^12.1.0",
+    "commander": "^13.0.0",
     "dotenv": "^16.4.5",
+    "ipull": "^3.9.0",
     "node-llama-cpp": "^3.0.0-beta.40",
     "openai": "^4.55.1",
     "tsx": "^4.16.2",
