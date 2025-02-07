@@ -5,6 +5,7 @@
   "main": "dist/index.mjs",
   "scripts": {
     "start": "tsx src/index.ts",
+    "debug": "node --inspect-brk ./node_modules/.bin/tsx src/index.ts",
     "build": "pkgroll",
     "deploy:patch": "npm version patch && npm run deploy:release",
     "deploy:minor": "npm version minor && npm run deploy:release",
