@@ -4,3 +4,7 @@ dist
 test-output
 .env
 dist.tar.gz
+
+node_modules/
+
+.idea/
