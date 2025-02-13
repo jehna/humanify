@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import { visitAllIdentifiers } from "../local-llm-rename/visit-all-identifiers.js";
 import { showPercentage } from "../../progress.js";
 import { verbose } from "../../verbose.js";
+import Instructor from "@instructor-ai/instructor";
+import { z } from 'zod';
 
 export function openaiRename({
   apiKey,
@@ -14,8 +16,11 @@ export function openaiRename({
   model: string;
   contextWindowSize: number;
 }) {
-  const client = new OpenAI({ apiKey, baseURL });
-
+  const oai = new OpenAI({ apiKey, baseURL });
+  const instructor = Instructor({
+    client: oai,
+    mode: "JSON",
+  })
   return async (code: string): Promise<string> => {
     return await visitAllIdentifiers(
       code,
@@ -23,14 +28,14 @@ export function openaiRename({
         verbose.log(`Renaming ${name}`);
         verbose.log("Context: ", surroundingCode);
 
-        const response = await client.chat.completions.create(
+        const result = await instructor.chat.completions.create(
           toRenamePrompt(name, surroundingCode, model)
         );
-        const result = response.choices[0].message?.content;
+
         if (!result) {
-          throw new Error("Failed to rename", { cause: response });
+          throw new Error("Failed to rename", { cause: result });
         }
-        const renamed = JSON.parse(result).newName;
+        const renamed = result.newName;
 
         verbose.log(`Renamed to ${renamed}`);
 
@@ -46,7 +51,12 @@ function toRenamePrompt(
   name: string,
   surroundingCode: string,
   model: string
-): OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming {
+) {
+  const schema = z.object({
+    newName: z.string({
+      description: `The new name for the variable/function called \`${name}\``
+    })
+  })
   return {
     model,
     messages: [
@@ -59,23 +69,9 @@ function toRenamePrompt(
         content: surroundingCode
       }
     ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        strict: true,
-        name: "rename",
-        schema: {
-          type: "object",
-          properties: {
-            newName: {
-              type: "string",
-              description: `The new name for the variable/function called \`${name}\``
-            }
-          },
-          required: ["newName"],
-          additionalProperties: false
-        }
-      }
+    response_model: {
+      name: "Result",
+      schema: schema
     }
   };
 }
