@@ -92,10 +92,10 @@ expect the tool to be installed globally, but they should work by replacing
 
 ### Usage
 
-Next you'll need to decide whether to use `openai`, `gemini` or `local` mode. In a
+Next you'll need to decide whether to use `openai`, `gemini`, `anthropic` or `local` mode. In a
 nutshell:
 
-* `openai` or `gemini` mode
+* `openai`, `gemini` or `anthropic` mode
   * Runs on someone else's computer that's specifically optimized for this kind
     of things
   * Costs money depending on the length of your code
@@ -133,6 +133,20 @@ humanify gemini --apiKey="your-token" obfuscated-file.js
 ```
 
 Alternatively you can also use an environment variable `GEMINI_API_KEY`. Use
+`humanify --help` to see all available options.
+
+### Anthropic mode
+
+You'll need an Anthropic key. You can get one by signing up at
+https://console.anthropic.com.
+
+You need to provice the API key to the tool:
+
+```shell
+humanify anthropic --apiKey="your-token" obfuscated-file.js
+```
+
+Alternatively you can also use an environment variable `ANTHROPIC_API_KEY`. Use
 `humanify --help` to see all available options.
 
 ### Local mode
