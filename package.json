@@ -52,7 +52,7 @@
     "@babel/types": "^7.25.2",
     "@google/generative-ai": "^0.20.0",
     "@types/babel__core": "^7.20.5",
-    "babel-plugin-transform-beautifier": "^0.1.0",
+    "babel-plugin-transform-beautifier": "^0.1.1",
     "commander": "^13.0.0",
     "dotenv": "^16.4.5",
     "ipull": "^3.9.0",
