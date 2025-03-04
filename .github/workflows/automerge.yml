@@ -1,41 +1,41 @@
 name: Dependabot auto-merge
-on: pull_request
+on:
+  check_suite:
+    types: [completed]
 
 permissions:
   pull-requests: write
-  contents: write
 
 jobs:
   dependabot:
     runs-on: ubuntu-latest
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: >
+      ${{
+        github.event.check_suite.conclusion == 'success' &&
+        github.event.check_suite.pull_requests[0].user.login == 'dependabot[bot]'
+      }}
     steps:
-      - name: Enable auto-merge for Dependabot PRs
+      - name: Auto-merge Dependabot PR
         env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          PR_URL: ${{ github.event.check_suite.pull_requests[0].html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BASE_BRANCH: ${{ github.event.check_suite.pull_requests[0].base.ref }}
         run: |
-          function get_pending_jobs() {
-            gh pr view "$PR_URL" --json statusCheckRollup --jq '.statusCheckRollup | map(select(.name != "dependabot")) | map(select(.status != "COMPLETED") | select(.status != "") | select(.status != null)).[]'
-          }
-          function get_failed_jobs() {
-            gh pr view "$PR_URL" --json statusCheckRollup --jq '.statusCheckRollup | map(select(.name != "dependabot")) | map(select(.conclusion != "SUCCESS") | select(.conclusion != "NEUTRAL") | select(.conclusion != "SKIPPED") | select(.conclusion != "") | select(.conclusion != null)).[]'
-          }
-          function wait_until_completed() {
-            while [[ $(get_pending_jobs) ]]
-            do
-              sleep 5
-            done
-          }
-          function fail_if_unsuccessful() {
-            if [[ $(get_failed_jobs) ]]; then
-              echo "Some jobs failed, unable to automerge"
-              exit 1
-            fi
-          }
-          function auto_merge() {
-            gh pr merge --auto --rebase "$PR_URL"
-          }
-          wait_until_completed && \
-          fail_if_unsuccessful && \
-          auto_merge
+          set -euo pipefail
+          echo "Checking branch protection rules for ${BASE_BRANCH}..."
+
+          # Make a single API call to get branch protection info
+          branch_protection_json=$(gh api repos/${REPO}/branches/${BASE_BRANCH}/protection --silent 2>/dev/null || echo '{}')
+
+          # Check if required_status_checks is present (not null)
+          if ! echo "$branch_protection_json" | jq -e '.required_status_checks != null' > /dev/null; then
+            echo "::error::Branch protection for ${BASE_BRANCH} does not require status checks. Exiting."
+            exit 1
+          fi
+
+          echo "✅ Branch protection with required status checks is properly configured."
+
+          echo "Enabling auto-merge for PR: ${PR_URL}..."
+          gh pr merge --auto --rebase "${PR_URL}"
+          echo "Auto-merge enabled. The PR will merge automatically once all required checks pass."
