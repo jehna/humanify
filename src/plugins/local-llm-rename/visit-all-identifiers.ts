@@ -10,59 +10,61 @@ const traverse: typeof babelTraverse.default.default = (
 
 type Visitor = (name: string, scope: string) => Promise<string>;
 
-export async function visitAllIdentifiers(
+export async function visitAllIdentifiers
+(
   code: string,
   visitor: Visitor,
   contextWindowSize: number,
-  onProgress?: (percentageDone: number) => void
-) {
-  const ast = await parseAsync(code, { sourceType: "unambiguous" });
-  const renames = new Set<string>();
-  const visited = new Set<string>();
+  onProgress?: (percentageDone: number) => void 
+)
+  {
+    const ast = await parseAsync(code, { sourceType: "unambiguous" });
+    const renames = new Set<string>();
+    const visited = new Set<string>();
 
-  if (!ast) {
-    throw new Error("Failed to parse code");
-  }
-
-  const scopes = await findScopes(ast);
-  const numRenamesExpected = scopes.length;
-
-  for (const smallestScope of scopes) {
-    if (hasVisited(smallestScope, visited)) continue;
-
-    const smallestScopeNode = smallestScope.node;
-    if (smallestScopeNode.type !== "Identifier") {
-      throw new Error("No identifiers found");
+    if (!ast) {
+      throw new Error("Failed to parse code");
     }
 
-    const surroundingCode = await scopeToString(
-      smallestScope,
-      contextWindowSize
-    );
-    const renamed = await visitor(smallestScopeNode.name, surroundingCode);
-    if (renamed !== smallestScopeNode.name) {
-      let safeRenamed = toIdentifier(renamed);
-      while (
-        renames.has(safeRenamed) ||
-        smallestScope.scope.hasBinding(safeRenamed)
-      ) {
-        safeRenamed = `_${safeRenamed}`;
+    const scopes = await findScopes(ast);
+    const numRenamesExpected = scopes.length;
+
+    for (const smallestScope of scopes) {
+      if (hasVisited(smallestScope, visited)) continue;
+
+      const smallestScopeNode = smallestScope.node;
+      if (smallestScopeNode.type !== "Identifier") {
+        throw new Error("No identifiers found");
       }
-      renames.add(safeRenamed);
 
-      smallestScope.scope.rename(smallestScopeNode.name, safeRenamed);
+      const surroundingCode = await scopeToString(
+        smallestScope,
+        contextWindowSize
+      );
+      const renamed = await visitor(smallestScopeNode.name, surroundingCode);
+      if (renamed !== smallestScopeNode.name) {
+        let safeRenamed = toIdentifier(renamed);
+        while (
+          renames.has(safeRenamed) ||
+          smallestScope.scope.hasBinding(safeRenamed)
+        ) {
+          safeRenamed = `_${safeRenamed}`;
+        }
+        renames.add(safeRenamed);
+
+        smallestScope.scope.rename(smallestScopeNode.name, safeRenamed);
+      }
+      markVisited(smallestScope, smallestScopeNode.name, visited);
+
+      onProgress?.(visited.size / numRenamesExpected);
     }
-    markVisited(smallestScope, smallestScopeNode.name, visited);
+    onProgress?.(1);
 
-    onProgress?.(visited.size / numRenamesExpected);
-  }
-  onProgress?.(1);
-
-  const stringified = await transformFromAstAsync(ast);
-  if (stringified?.code == null) {
-    throw new Error("Failed to stringify code");
-  }
-  return stringified.code;
+    const stringified = await transformFromAstAsync(ast);
+    if (stringified?.code == null) {
+      throw new Error("Failed to stringify code");
+    }
+    return stringified.code;
 }
 
 function findScopes(ast: Node): NodePath<Identifier>[] {
