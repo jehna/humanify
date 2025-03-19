@@ -15,7 +15,7 @@ type ModelDefinition = { url: URL; wrapper?: ChatWrapper };
 
 export const MODELS: { [modelName: string]: ModelDefinition } = {
   "2b": {
-    url: url`https://huggingface.co/bartowski/Phi-3.1-mini-4k-instruct-GGUF/resolve/main/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf?download=true`
+    url: url`https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf?download=true`
   },
   "8b": {
     url: url`https://huggingface.co/lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf?download=true`,
