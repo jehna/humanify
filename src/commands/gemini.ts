@@ -11,7 +11,7 @@ import { parseNumber } from "../number-utils.js";
 export const azure = cli()
   .name("gemini")
   .description("Use Google Gemini/AIStudio API to unminify code")
-  .option("-m, --model <model>", "The model to use", "gemini-1.5-flash")
+  .option("-m, --model <model>", "The model to use", "gemini-2.0-flash-001")
   .option("-o, --outputDir <output>", "The output directory", "output")
   .option(
     "--contextSize <contextSize>",
