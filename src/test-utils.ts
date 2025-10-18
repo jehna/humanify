@@ -11,7 +11,12 @@ export function assertMatches(actual: string, expected: string[]) {
 
 export async function humanify(...argv: string[]) {
   const extraArgs = argv.includes("local") ? ["--seed", "1"] : [];
-  const process = spawn("./dist/index.mjs", [...argv, ...extraArgs]);
+  // Try using built dist first, fall back to tsx if dist doesn't exist
+  const { existsSync } = await import("fs");
+  const command = existsSync("./dist/index.mjs") ? "./dist/index.mjs" : "npx";
+  const args = existsSync("./dist/index.mjs") ? [...argv, ...extraArgs] : ["tsx", "src/index.ts", ...argv, ...extraArgs];
+
+  const process = spawn(command, args, { shell: true });
   const stdout: string[] = [];
   const stderr: string[] = [];
   process.stdout.on("data", (data) => stdout.push(data.toString()));

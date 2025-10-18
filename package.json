@@ -18,6 +18,7 @@
     "test:llm": "find src -name '*.llmtest.ts' | xargs tsx --test --test-concurrency=1",
     "test:openai": "npm run build && find src -name '*.openaitest.ts' | xargs tsx --test",
     "test:gemini": "npm run build && find src -name '*.geminitest.ts' | xargs tsx --test",
+    "test:ollama": "npm run build && find src -name '*.ollamatest.ts' | xargs tsx --test",
     "lint": "npm run lint:prettier && npm run lint:eslint",
     "lint:prettier": "prettier --check src/* src/**/*",
     "lint:eslint": "eslint src/* src/**/*",
@@ -72,5 +73,8 @@
     "pkgroll": "^2.4.2",
     "prettier": "^3.3.3",
     "typescript-eslint": "^8.0.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.52.5"
   }
 }
