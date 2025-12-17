@@ -57,7 +57,7 @@
     "dotenv": "^16.4.5",
     "ipull": "^3.9.0",
     "node-llama-cpp": "^3.0.0-beta.40",
-    "openai": "^4.55.1",
+    "openai": "^6.14.0",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4",
     "webcrack": "^2.13.0"
