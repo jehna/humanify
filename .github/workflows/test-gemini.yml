@@ -6,6 +6,8 @@ jobs:
   test-gemini:
     name: Run tests
     runs-on: macos-latest
+    env:
+      NODE_LLAMA_CPP_CMAKE_OPTION_GGML_NATIVE: "OFF"
     steps:
       - uses: actions/checkout@v4
       - name: Cache test model
@@ -20,7 +22,9 @@ jobs:
         with:
           node-version: 20
           cache: "npm"
-      - run: npm install --ci
+      - run: npm ci
+      - name: Build node-llama-cpp
+        run: npx node-llama-cpp source download --gpu false
       - run: npm run build
       - run: npm run download-ci-model
       - run: npm run test:gemini
