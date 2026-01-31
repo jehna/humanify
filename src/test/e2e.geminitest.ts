@@ -15,7 +15,7 @@ test("Unminifies an example file successfully", async () => {
   const fileIsMinified = async (filename: string) => {
     const prompt = await testPrompt();
     return await prompt(
-      `Your job is to read the following code and rate it's readabillity and variable names. Answer "EXCELLENT", "GOOD" or "UNREADABLE".`,
+      `Your job is to rate the variable and function names in the following code. If the names are meaningful words like "substring", "length", "index", answer "GOOD" or "EXCELLENT". If the names are single letters or meaningless like "a", "e", "t", "n", "r", "i", answer "UNREADABLE". Focus ONLY on the names, not the code logic.`,
       await readFile(filename, "utf-8"),
       gbnf`${/("EXCELLENT" | "GOOD" | "UNREADABLE") [^.]+/}.`
     );
