@@ -2,9 +2,16 @@
 //!
 //! A JavaScript deobfuscator that renames minified variables and functions
 //! using a callback mechanism to determine new names based on context.
+//!
+//! ## Features
+//!
+//! - Parse JavaScript to AST and rename identifiers
+//! - Local LLM inference for intelligent renaming (via llama.cpp)
+//! - GBNF grammar support for constraining LLM output
 
 mod error;
 mod identifier;
+pub mod llm;
 mod renamer;
 mod visitor;
 

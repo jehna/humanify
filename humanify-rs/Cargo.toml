@@ -5,6 +5,11 @@ edition = "2021"
 description = "A JavaScript deobfuscator that renames minified variables using callbacks"
 license = "MIT"
 
+[features]
+default = []
+cuda = ["llama-cpp-2/cuda"]
+metal = ["llama-cpp-2/metal"]
+
 [dependencies]
 oxc = "0.65"
 oxc_allocator = "0.65"
@@ -15,6 +20,12 @@ oxc_span = "0.65"
 oxc_syntax = "0.65"
 oxc_codegen = "0.65"
 thiserror = "2.0"
+
+# LLM inference
+llama-cpp-2 = "0.1"
+
+# Utilities
+dirs = "6.0"
 
 [dev-dependencies]
 pretty_assertions = "1.4"
