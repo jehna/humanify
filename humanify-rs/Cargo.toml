@@ -1,0 +1,20 @@
+[package]
+name = "humanify-rs"
+version = "0.1.0"
+edition = "2021"
+description = "A JavaScript deobfuscator that renames minified variables using callbacks"
+license = "MIT"
+
+[dependencies]
+oxc = "0.65"
+oxc_allocator = "0.65"
+oxc_parser = "0.65"
+oxc_ast = "0.65"
+oxc_ast_visit = "0.65"
+oxc_span = "0.65"
+oxc_syntax = "0.65"
+oxc_codegen = "0.65"
+thiserror = "2.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
