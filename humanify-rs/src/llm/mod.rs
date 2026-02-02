@@ -12,7 +12,10 @@ mod prompt;
 mod unminify;
 
 pub use grammar::{Grammar, GrammarBuilder};
-pub use model::{LlamaModel, ModelConfig, ModelError};
+pub use model::{
+    ensure_model_directory, get_model_definition, get_model_path, is_model_downloaded,
+    LlamaModel, ModelConfig, ModelDefinition, ModelError, MODELS,
+};
 pub use prompt::{Prompt, PromptError};
 pub use unminify::{
     define_filename, local_rename, unminify_variable_name, LocalRenameError, LocalRenamer,
