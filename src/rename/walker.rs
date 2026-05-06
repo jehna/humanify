@@ -480,6 +480,88 @@ mod tests {
     }
 
     #[test]
+    fn surrounding_code_for_program_level_binding_is_full_source() {
+        // Top-level binding: surrounding_code should be the entire source text.
+        let input = "const x = 1;";
+        let mut rec = MockRenamer::Recording {
+            suffix: "_y".to_string(),
+            calls: Vec::new(),
+        };
+        let _ = rename_all_identifiers(input, &mut rec, 500).unwrap();
+        let calls = match &rec {
+            MockRenamer::Recording { calls, .. } => calls.clone(),
+            _ => unreachable!(),
+        };
+        let scope = calls
+            .iter()
+            .find(|(n, _)| n == "x")
+            .map(|(_, s)| s.as_str())
+            .expect("expected a call for 'x'");
+        assert_eq!(scope, input, "surrounding_code for top-level binding should be the full source");
+    }
+
+    #[test]
+    fn surrounding_code_for_inner_binding_excludes_outer_code() {
+        // Inner binding: surrounding_code should be the function body, NOT the outer variable.
+        let input = "const outer = 99; function fn1() { const inner = 1; }";
+        let mut rec = MockRenamer::Recording {
+            suffix: "_y".to_string(),
+            calls: Vec::new(),
+        };
+        let _ = rename_all_identifiers(input, &mut rec, 500).unwrap();
+        let calls = match &rec {
+            MockRenamer::Recording { calls, .. } => calls.clone(),
+            _ => unreachable!(),
+        };
+        let inner_scope = calls
+            .iter()
+            .find(|(n, _)| n == "inner")
+            .map(|(_, s)| s.as_str())
+            .expect("expected a call for 'inner'");
+        assert!(
+            inner_scope.contains("const inner = 1"),
+            "inner scope should contain its own declaration: {inner_scope}"
+        );
+        assert!(
+            !inner_scope.contains("const outer"),
+            "inner scope should NOT contain outer variable: {inner_scope}"
+        );
+    }
+
+    #[test]
+    fn surrounding_code_is_truncated_by_context_size() {
+        // With a small context_size, the surrounding_code for an inner binding is truncated.
+        let input = "function big() { const x = 1; const y = 2; const z = 3; const w = 4; }";
+        let mut rec = MockRenamer::Recording {
+            suffix: "_y".to_string(),
+            calls: Vec::new(),
+        };
+        let _ = rename_all_identifiers(input, &mut rec, 20).unwrap();
+        let calls = match &rec {
+            MockRenamer::Recording { calls, .. } => calls.clone(),
+            _ => unreachable!(),
+        };
+        // x is a binding inside 'big'; with context_size=20 its surrounding_code
+        // should be the first 20 bytes of the function scope, not the full source.
+        let x_scope = calls
+            .iter()
+            .find(|(n, _)| n == "x")
+            .map(|(_, s)| s.as_str())
+            .expect("expected a call for 'x'");
+        // context_size=20 means we get at most 20 chars of the scope — which is shorter
+        // than the full source (69 chars). Allow a small off-by-one from span boundaries.
+        assert!(
+            x_scope.len() < input.len(),
+            "surrounding_code should be truncated (shorter than full source), got {} bytes: {x_scope:?}",
+            x_scope.len()
+        );
+        assert!(
+            !x_scope.contains("const w = 4"),
+            "truncated surrounding_code should not contain late declarations: {x_scope:?}"
+        );
+    }
+
+    #[test]
     fn does_not_rename_object_properties() {
         // const c = 2; const a = { b: c }; a.b;
         // bindings: c, a — b is a property key (not a binding).
