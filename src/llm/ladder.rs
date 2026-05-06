@@ -298,7 +298,6 @@ mod tests {
     // kept inline: concurrency setup (8 spawns + Barrier) doesn't compress into DSL without obscuring the race structure
     #[tokio::test]
     async fn concurrent_calls_during_probe() {
-        use std::sync::atomic::Ordering::SeqCst;
         use std::sync::Arc;
         use tokio::sync::Barrier;
 
@@ -316,7 +315,6 @@ mod tests {
                 .map(|_| ScriptedResponse::Ok(json!({"ok":true})))
                 .collect(),
         );
-        let s1_count = s1.call_count.clone();
 
         let dyn_strats: Vec<Arc<dyn JsonStrategy>> = vec![
             Arc::clone(&s0) as Arc<dyn JsonStrategy>,
@@ -341,9 +339,6 @@ mod tests {
         }
 
         assert_eq!(ladder.locked_strategy_name(), Some("s1"));
-        assert!(
-            s1_count.load(SeqCst) >= 1,
-            "s1 should have been called at least once"
-        );
+        assert!(s1.count() >= 1, "s1 should have been called at least once");
     }
 }

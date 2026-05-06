@@ -529,7 +529,6 @@ mod tests {
 
     #[test]
     fn tc_content_present_alongside_tool_calls() {
-        // content is ignored when tool_calls is present and valid
         let r = json!({"choices":[{"message":{"content":"hi","tool_calls":[{"function":{"name":TOOL_NAME,"arguments":"{\"x\":1}"}}]}}]});
         extract_succeeds(extract_tool_call_arguments(&r), &json!({"x": 1}));
     }
@@ -614,7 +613,6 @@ mod tests {
 
     #[test]
     fn pt_content_with_prose_then_fence() {
-        // Prose before fence → content doesn't start with ``` → no stripping → Transient
         extract_fails_with(
             extract_prompt_content_as_json(&pt("Here you go:\n```json\n{\"x\":1}\n```")),
             "",

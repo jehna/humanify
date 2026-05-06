@@ -41,6 +41,20 @@ pub struct RecordingRenamer {
 #[derive(Default, Clone)]
 pub struct CallLog(pub Vec<(String, String)>);
 
+impl CallLog {
+    pub fn call_names(&self) -> Vec<&str> {
+        self.0.iter().map(|(n, _)| n.as_str()).collect()
+    }
+
+    pub fn scope_for(&self, name: &str) -> &str {
+        self.0
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, s)| s.as_str())
+            .unwrap_or_else(|| panic!("no call recorded for '{name}'"))
+    }
+}
+
 impl Renamer for RecordingRenamer {
     fn rename(&mut self, original: &str, surrounding: &str) -> String {
         self.log

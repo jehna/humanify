@@ -334,10 +334,11 @@ mod tests {
         );
     }
 
+    const SCOPE_INPUT: &str = "const a = 1;\nfunction foo() {\n  const b = 2;\n\n  class Bar {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n};\n";
+
     #[test]
     fn passes_surrounding_scope_argument() {
-        let input = "const a = 1;\nfunction foo() {\n  const b = 2;\n\n  class Bar {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n};\n";
-        let (_, log) = scenario(input)
+        let (_, log) = scenario(SCOPE_INPUT)
             .with_context_size(500)
             .with_recording(recording("_changed"));
         assert_eq!(
@@ -347,21 +348,23 @@ mod tests {
             log.0.len(),
             log.0
         );
-        let names: Vec<&str> = log.0.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(
-            names,
-            &["a", "foo", "b", "Bar", "y"],
-            "wrong name order: {names:?}"
-        );
-        let b_scope = &log.0[2].1;
-        assert!(
-            b_scope.contains("const b = 2"),
-            "scope for 'b' should contain declaration: {b_scope}"
-        );
-        assert!(
-            b_scope.contains("foo"),
-            "scope for 'b' should contain 'foo': {b_scope}"
-        );
+    }
+
+    #[test]
+    fn passes_identifiers_in_scope_order() {
+        let (_, log) = scenario(SCOPE_INPUT)
+            .with_context_size(500)
+            .with_recording(recording("_x"));
+        assert_eq!(log.call_names(), &["a", "foo", "b", "Bar", "y"]);
+    }
+
+    #[test]
+    fn scope_for_inner_binding_contains_enclosing_function() {
+        let (_, log) = scenario(SCOPE_INPUT)
+            .with_context_size(500)
+            .with_recording(recording("_x"));
+        assert!(log.scope_for("b").contains("const b = 2"));
+        assert!(log.scope_for("b").contains("foo"));
     }
 
     #[test]
