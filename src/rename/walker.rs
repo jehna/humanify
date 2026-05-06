@@ -72,7 +72,7 @@ pub fn rename_all_identifiers(
     // Sort: largest scope first; ties broken by source position (ascending).
     entries.sort_by(|a, b| b.1.cmp(&a.1).then(a.2.cmp(&b.2)));
 
-    let mut visited: HashSet<String> = HashSet::new();
+    let mut visited: HashSet<SymbolId> = HashSet::new();
     let mut taken: HashSet<String> = HashSet::new();
 
     for (sym_id, _, _) in &entries {
@@ -82,11 +82,13 @@ pub fn rename_all_identifiers(
             scoping.symbol_name(sym_id).to_string()
         };
 
-        // v1 deduplication: keyed by original name string.
-        if visited.contains(&original_name) {
+        // Each binding (symbol_id) is processed independently — shadowed
+        // variables with the same name in different scopes each get their
+        // own rename call.
+        if visited.contains(&sym_id) {
             continue;
         }
-        visited.insert(original_name.clone());
+        visited.insert(sym_id);
 
         // Compute surrounding code context.
         let surrounding = {
@@ -335,20 +337,14 @@ mod tests {
 
     #[test]
     fn renames_shadowed_variables() {
-        // Two independent bindings named 'a' — visited-set is by original name, so only
-        // the first (outer) binding calls the renamer; inner 'a' gets skipped.
-        // v1 parity: visited keyed by original name → only first 'a' is renamed.
+        // Two independent bindings named 'a' in different scopes — each gets
+        // its own rename call since visited-set is keyed by symbol_id.
         let out = run(
             "const a = 1; (function () { const a = 2; });",
-            &mut queue(&["c", "d"]),
+            &mut queue(&["b", "c"]),
         );
-        // Outer 'a' → 'c'. Inner 'a' skipped (already visited by name).
-        assert!(out.contains("const c = 1"), "expected outer c: {out}");
-        // Inner 'a' stays as 'a' (skipped).
-        assert!(
-            out.contains("const a = 2"),
-            "expected inner a unchanged: {out}"
-        );
+        assert!(out.contains("const b = 1"), "expected outer b: {out}");
+        assert!(out.contains("const c = 2"), "expected inner c: {out}");
     }
 
     #[test]
