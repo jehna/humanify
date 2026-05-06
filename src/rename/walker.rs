@@ -114,8 +114,7 @@ pub fn rename_all_identifiers(
         }
 
         // Apply safe-name normalization.
-        // TODO(task-3): extract to src/rename/safe_name.rs
-        let mut safe = to_safe_identifier(&new_name);
+        let mut safe = super::safe_name::to_identifier(&new_name);
 
         // Collision loop: prefix with '_' until name is free.
         let scope_id = semantic.scoping().symbol_scope_id(sym_id);
@@ -225,100 +224,6 @@ fn compute_context_window(
         let end = (ctx_start + context_size).min(ctx_end);
         source[ctx_start..end].to_string()
     }
-}
-
-/// Normalize a string to a valid JS identifier (minimal inline; task-3 extracts this).
-/// TODO(task-3): extract to src/rename/safe_name.rs
-fn to_safe_identifier(s: &str) -> String {
-    if s.is_empty() {
-        return "_".to_string();
-    }
-
-    // Convert separator runs (`.`, ` `, `-`) followed by a char into camelCase.
-    let mut result = String::with_capacity(s.len());
-    let mut capitalize_next = false;
-    for ch in s.chars() {
-        if ch == '.' || ch == ' ' || ch == '-' {
-            capitalize_next = true;
-        } else if !ch.is_alphanumeric() && ch != '_' && ch != '$' {
-            // Strip invalid chars silently.
-        } else if capitalize_next {
-            capitalize_next = false;
-            for c in ch.to_uppercase() {
-                result.push(c);
-            }
-        } else {
-            result.push(ch);
-        }
-    }
-
-    if result.is_empty() {
-        return "_".to_string();
-    }
-
-    // If the first char isn't a valid identifier start, prefix with '_'.
-    let first = result.chars().next().unwrap();
-    if first.is_ascii_digit() {
-        result.insert(0, '_');
-    }
-
-    // Prefix reserved words with '_'.
-    if is_reserved_word(&result) {
-        result.insert(0, '_');
-    }
-
-    result
-}
-
-fn is_reserved_word(s: &str) -> bool {
-    matches!(
-        s,
-        "break"
-            | "case"
-            | "catch"
-            | "class"
-            | "const"
-            | "continue"
-            | "debugger"
-            | "default"
-            | "delete"
-            | "do"
-            | "else"
-            | "enum"
-            | "export"
-            | "extends"
-            | "false"
-            | "finally"
-            | "for"
-            | "function"
-            | "if"
-            | "import"
-            | "in"
-            | "instanceof"
-            | "new"
-            | "null"
-            | "return"
-            | "super"
-            | "switch"
-            | "this"
-            | "throw"
-            | "true"
-            | "try"
-            | "typeof"
-            | "var"
-            | "void"
-            | "while"
-            | "with"
-            | "yield"
-            | "let"
-            | "static"
-            | "implements"
-            | "interface"
-            | "package"
-            | "private"
-            | "protected"
-            | "public"
-    )
 }
 
 #[cfg(test)]

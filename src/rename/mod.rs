@@ -1,3 +1,4 @@
+mod safe_name;
 mod walker;
 
 pub use walker::rename_all_identifiers;

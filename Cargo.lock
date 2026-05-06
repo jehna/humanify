@@ -292,6 +292,7 @@ dependencies = [
  "oxc_str",
  "tempfile",
  "thiserror",
+ "unicode-ident",
 ]
 
 [[package]]
