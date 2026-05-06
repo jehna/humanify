@@ -1,18 +1,15 @@
-use std::io::{self, IsTerminal, Read, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::Path;
 
 pub fn read_input(input_arg: &str) -> io::Result<String> {
     if input_arg == "-" {
-        let mut stdin = io::stdin();
+        let stdin = io::stdin();
         if stdin.is_terminal() {
             eprintln!("reading minified JS from stdin... (Ctrl+D when done)");
         }
-        let mut buf = String::new();
-        stdin.read_to_string(&mut buf)?;
-        Ok(buf)
+        io::read_to_string(stdin)
     } else {
-        let bytes = std::fs::read(input_arg)?;
-        String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        std::fs::read_to_string(input_arg)
     }
 }
 
