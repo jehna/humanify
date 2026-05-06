@@ -2,6 +2,7 @@ pub mod anthropic;
 pub mod http;
 pub mod ladder;
 pub mod openai_compat;
+pub mod renamer;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -10,6 +11,7 @@ pub use anthropic::{AnthropicNativeJsonSchema, AnthropicToolCallAndPrompt};
 pub use http::{classify_error, HttpClient, StrategyError};
 pub use ladder::Ladder;
 pub use openai_compat::{ForcedToolCall, OpenAIJsonSchema, PromptToJson, ToolCallAndPrompt};
+pub use renamer::LlmRenamer;
 
 #[async_trait]
 pub trait JsonStrategy: Send + Sync {
