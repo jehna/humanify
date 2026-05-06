@@ -15,6 +15,10 @@ oxc_span = "0.126.0"
 thiserror = "2.0.18"
 oxc_str = "0.126.0"
 unicode-ident = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tokio = { version = "1.52.2", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 tempfile = "3"
