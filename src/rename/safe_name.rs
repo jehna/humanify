@@ -108,126 +108,126 @@ pub fn is_reserved_word(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::test_dsl::to_identifier_of;
 
     // --- to_identifier ---
 
     #[test]
     fn preserves_simple_name() {
-        assert_eq!(to_identifier("foo"), "foo");
+        to_identifier_of("foo").is("foo");
     }
 
     #[test]
     fn strips_dot_and_camel_cases() {
-        assert_eq!(to_identifier("this.kLength"), "thisKLength");
+        to_identifier_of("this.kLength").is("thisKLength");
     }
 
     #[test]
     fn strips_space_and_camel_cases() {
-        assert_eq!(to_identifier("foo bar"), "fooBar");
+        to_identifier_of("foo bar").is("fooBar");
     }
 
     #[test]
     fn strips_dash_and_camel_cases() {
-        assert_eq!(to_identifier("foo-bar-baz"), "fooBarBaz");
+        to_identifier_of("foo-bar-baz").is("fooBarBaz");
     }
 
     #[test]
     fn collapses_consecutive_separators() {
-        assert_eq!(to_identifier("a..b"), "aB");
+        to_identifier_of("a..b").is("aB");
     }
 
     #[test]
     fn drops_unknown_punctuation() {
-        assert_eq!(to_identifier("foo!?bar"), "foobar");
+        to_identifier_of("foo!?bar").is("foobar");
     }
 
     #[test]
     fn empty_input_returns_underscore() {
-        assert_eq!(to_identifier(""), "_");
+        to_identifier_of("").is("_");
     }
 
     #[test]
     fn all_stripped_returns_underscore() {
-        assert_eq!(to_identifier("!!??"), "_");
+        to_identifier_of("!!??").is("_");
     }
 
     #[test]
     fn leading_digit_prepends_underscore() {
-        assert_eq!(to_identifier("123abc"), "_123abc");
+        to_identifier_of("123abc").is("_123abc");
     }
 
     #[test]
     fn reserved_word_static() {
-        assert_eq!(to_identifier("static"), "_static");
+        to_identifier_of("static").is("_static");
     }
 
     #[test]
     fn reserved_word_class() {
-        assert_eq!(to_identifier("class"), "_class");
+        to_identifier_of("class").is("_class");
     }
 
     #[test]
     fn reserved_word_let() {
-        assert_eq!(to_identifier("let"), "_let");
+        to_identifier_of("let").is("_let");
     }
 
     #[test]
     fn underscore_passes_through() {
-        assert_eq!(to_identifier("_foo"), "_foo");
+        to_identifier_of("_foo").is("_foo");
     }
 
     #[test]
     fn preexisting_underscore_static() {
         // `_static` is not in the reserved set → passes through unchanged.
-        assert_eq!(to_identifier("_static"), "_static");
+        to_identifier_of("_static").is("_static");
     }
 
     #[test]
     fn unicode_xid_continue_preserved() {
-        assert_eq!(to_identifier("café"), "café");
+        to_identifier_of("café").is("café");
     }
 
     #[test]
     fn dollar_sign_preserved() {
-        assert_eq!(to_identifier("$dollar"), "$dollar");
+        to_identifier_of("$dollar").is("$dollar");
     }
 
     #[test]
     fn already_camel_preserved() {
-        assert_eq!(to_identifier("alreadyCamel"), "alreadyCamel");
+        to_identifier_of("alreadyCamel").is("alreadyCamel");
     }
 
     // --- is_reserved_word ---
 
     #[test]
     fn true_for_static() {
-        assert!(is_reserved_word("static"));
+        to_identifier_of("static").is_reserved();
     }
 
     #[test]
     fn true_for_class() {
-        assert!(is_reserved_word("class"));
+        to_identifier_of("class").is_reserved();
     }
 
     #[test]
     fn true_for_let() {
-        assert!(is_reserved_word("let"));
+        to_identifier_of("let").is_reserved();
     }
 
     #[test]
     fn false_for_foo() {
-        assert!(!is_reserved_word("foo"));
+        to_identifier_of("foo").is_not_reserved();
     }
 
     #[test]
     fn false_for_underscore_static() {
-        assert!(!is_reserved_word("_static"));
+        to_identifier_of("_static").is_not_reserved();
     }
 
     #[test]
     fn false_for_async() {
         // `async` is a contextual identifier we accept as a valid binding name.
-        assert!(!is_reserved_word("async"));
+        to_identifier_of("async").is_not_reserved();
     }
 }

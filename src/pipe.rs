@@ -25,6 +25,8 @@ pub fn write_output(output_arg: Option<&Path>, contents: &str) -> io::Result<()>
 
 #[cfg(test)]
 mod tests {
+    // DSL not applied: pipe tests exercise OS I/O (tempfiles, stdin path) and are
+    // already 3–5 lines each. A DSL wrapper would add boilerplate without clarity.
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;

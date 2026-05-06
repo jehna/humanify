@@ -1,4 +1,6 @@
 mod safe_name;
+#[cfg(test)]
+pub mod test_dsl;
 mod walker;
 
 pub use walker::rename_all_identifiers;

@@ -269,143 +269,143 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn assert_transient(result: Result<Value, StrategyError>) {
-        match result {
-            Err(StrategyError::Transient(_)) => {}
-            Ok(v) => panic!("expected Transient, got Ok({v})"),
-            Err(StrategyError::NotSupported(r)) => {
-                panic!("expected Transient, got NotSupported({r})")
-            }
-        }
-    }
+    use crate::llm::test_dsl::{extract_fails_with, extract_succeeds};
 
     // --- extract_anthropic_native_json ---
 
     #[test]
     fn native_happy_path_block_type_json() {
-        let r = json!({"content": [{"type": "json", "json": {"x": 1}}]});
-        assert_eq!(extract_anthropic_native_json(&r).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_anthropic_native_json(&json!({"content":[{"type":"json","json":{"x":1}}]})),
+            &json!({"x":1}),
+        );
     }
 
     #[test]
     fn native_happy_path_with_text_first() {
-        let r = json!({
-            "content": [
-                {"type": "text", "text": "thinking..."},
-                {"type": "json", "json": {"x": 1}}
-            ]
-        });
-        assert_eq!(extract_anthropic_native_json(&r).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_anthropic_native_json(
+                &json!({"content":[{"type":"text","text":"thinking..."},{"type":"json","json":{"x":1}}]}),
+            ),
+            &json!({"x":1}),
+        );
     }
 
     #[test]
     fn native_block_type_json_schema() {
-        let r = json!({"content": [{"type": "json_schema", "json": {"x": 1}}]});
-        assert_eq!(extract_anthropic_native_json(&r).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_anthropic_native_json(
+                &json!({"content":[{"type":"json_schema","json":{"x":1}}]}),
+            ),
+            &json!({"x":1}),
+        );
     }
 
     #[test]
     fn native_block_type_output_json() {
-        let r = json!({"content": [{"type": "output_json", "json": {"x": 1}}]});
-        assert_eq!(extract_anthropic_native_json(&r).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_anthropic_native_json(
+                &json!({"content":[{"type":"output_json","json":{"x":1}}]}),
+            ),
+            &json!({"x":1}),
+        );
     }
 
     #[test]
     fn native_no_json_block() {
-        let r = json!({"content": [{"type": "text", "text": "hello"}]});
-        assert_transient(extract_anthropic_native_json(&r));
+        extract_fails_with(
+            extract_anthropic_native_json(&json!({"content":[{"type":"text","text":"hello"}]})),
+            "",
+        );
     }
 
     #[test]
     fn native_content_empty() {
-        assert_transient(extract_anthropic_native_json(&json!({"content": []})));
+        extract_fails_with(extract_anthropic_native_json(&json!({"content":[]})), "");
     }
 
     #[test]
     fn native_content_missing() {
-        assert_transient(extract_anthropic_native_json(&json!({})));
+        extract_fails_with(extract_anthropic_native_json(&json!({})), "");
     }
 
     #[test]
     fn native_content_not_an_array() {
-        assert_transient(extract_anthropic_native_json(&json!({"content": "hello"})));
+        extract_fails_with(
+            extract_anthropic_native_json(&json!({"content":"hello"})),
+            "",
+        );
     }
 
     // --- extract_anthropic_tool_input ---
 
     #[test]
     fn tool_happy_path() {
-        let r = json!({
-            "content": [{
-                "type": "tool_use",
-                "name": "humanify_response",
-                "input": {"x": 1}
-            }]
-        });
-        assert_eq!(extract_anthropic_tool_input(&r).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_anthropic_tool_input(
+                &json!({"content":[{"type":"tool_use","name":"humanify_response","input":{"x":1}}]}),
+            ),
+            &json!({"x":1}),
+        );
     }
 
     #[test]
     fn tool_text_then_tool_use() {
-        let r = json!({
-            "content": [
-                {"type": "text", "text": "Let me think..."},
-                {"type": "tool_use", "name": "humanify_response", "input": {"x": 1}}
-            ]
-        });
-        assert_eq!(extract_anthropic_tool_input(&r).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_anthropic_tool_input(
+                &json!({"content":[{"type":"text","text":"Let me think..."},{"type":"tool_use","name":"humanify_response","input":{"x":1}}]}),
+            ),
+            &json!({"x":1}),
+        );
     }
 
     #[test]
     fn tool_wrong_tool_name() {
-        let r = json!({
-            "content": [{
-                "type": "tool_use",
-                "name": "something_else",
-                "input": {"x": 1}
-            }]
-        });
-        assert_transient(extract_anthropic_tool_input(&r));
+        extract_fails_with(
+            extract_anthropic_tool_input(
+                &json!({"content":[{"type":"tool_use","name":"something_else","input":{"x":1}}]}),
+            ),
+            "",
+        );
     }
 
     #[test]
     fn tool_no_tool_use() {
-        let r = json!({"content": [{"type": "text", "text": "hi"}]});
-        assert_transient(extract_anthropic_tool_input(&r));
+        extract_fails_with(
+            extract_anthropic_tool_input(&json!({"content":[{"type":"text","text":"hi"}]})),
+            "",
+        );
     }
 
     #[test]
     fn tool_content_empty() {
-        assert_transient(extract_anthropic_tool_input(&json!({"content": []})));
+        extract_fails_with(extract_anthropic_tool_input(&json!({"content":[]})), "");
     }
 
     #[test]
     fn tool_content_missing() {
-        assert_transient(extract_anthropic_tool_input(&json!({})));
+        extract_fails_with(extract_anthropic_tool_input(&json!({})), "");
     }
 
     #[test]
     fn tool_input_is_string_not_object() {
         // Not expected in practice, but we return whatever Anthropic gave us.
-        let r = json!({
-            "content": [{
-                "type": "tool_use",
-                "name": "humanify_response",
-                "input": "{\"x\":1}"
-            }]
-        });
-        assert_eq!(
-            extract_anthropic_tool_input(&r).unwrap(),
-            json!("{\"x\":1}")
+        extract_succeeds(
+            extract_anthropic_tool_input(
+                &json!({"content":[{"type":"tool_use","name":"humanify_response","input":"{\"x\":1}"}]}),
+            ),
+            &json!("{\"x\":1}"),
         );
     }
 
     #[test]
     fn tool_input_missing() {
-        let r = json!({
-            "content": [{"type": "tool_use", "name": "humanify_response"}]
-        });
-        assert_transient(extract_anthropic_tool_input(&r));
+        extract_fails_with(
+            extract_anthropic_tool_input(
+                &json!({"content":[{"type":"tool_use","name":"humanify_response"}]}),
+            ),
+            "",
+        );
     }
 
     // --- anthropic_headers ---

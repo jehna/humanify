@@ -133,242 +133,134 @@ impl Ladder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::VecDeque;
-    use std::sync::atomic::AtomicUsize;
-    use std::sync::Mutex;
-
-    use async_trait::async_trait;
     use serde_json::json;
 
-    enum MockResponse {
-        Ok(Value),
-        NotSupported(String),
-        Transient(String),
-    }
-
-    struct MockStrategy {
-        strategy_name: &'static str,
-        responses: Arc<Mutex<VecDeque<MockResponse>>>,
-        call_count: Arc<AtomicUsize>,
-    }
-
-    impl MockStrategy {
-        fn new(name: &'static str, responses: Vec<MockResponse>) -> Arc<Self> {
-            Arc::new(Self {
-                strategy_name: name,
-                responses: Arc::new(Mutex::new(VecDeque::from(responses))),
-                call_count: Arc::new(AtomicUsize::new(0)),
-            })
-        }
-
-        fn count(&self) -> usize {
-            self.call_count.load(SeqCst)
-        }
-    }
-
-    #[async_trait]
-    impl JsonStrategy for MockStrategy {
-        async fn call(&self, _: &str, _: &str, _: &Value) -> Result<Value, StrategyError> {
-            self.call_count.fetch_add(1, SeqCst);
-            let next = self
-                .responses
-                .lock()
-                .unwrap()
-                .pop_front()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "MockStrategy '{}' called more times than configured",
-                        self.strategy_name
-                    )
-                });
-            match next {
-                MockResponse::Ok(v) => Ok(v),
-                MockResponse::NotSupported(r) => Err(StrategyError::NotSupported(r)),
-                MockResponse::Transient(r) => Err(StrategyError::Transient(anyhow!("{}", r))),
-            }
-        }
-
-        fn name(&self) -> &'static str {
-            self.strategy_name
-        }
-    }
-
-    fn ok() -> MockResponse {
-        MockResponse::Ok(json!({"ok": true}))
-    }
-    fn ns(reason: &str) -> MockResponse {
-        MockResponse::NotSupported(reason.to_string())
-    }
-    fn tr(msg: &str) -> MockResponse {
-        MockResponse::Transient(msg.to_string())
-    }
-
-    fn assert_ok(r: Result<Value, StrategyError>) -> Value {
-        match r {
-            Ok(v) => v,
-            Err(e) => panic!("expected Ok, got Err: {e}"),
-        }
-    }
-
-    fn assert_transient(r: Result<Value, StrategyError>) -> String {
-        match r {
-            Err(StrategyError::Transient(e)) => e.to_string(),
-            Ok(v) => panic!("expected Transient, got Ok({v})"),
-            Err(StrategyError::NotSupported(r)) => {
-                panic!("expected Transient, got NotSupported({r})")
-            }
-        }
-    }
+    use crate::llm::test_dsl::{
+        ladder_with, not_supported, ok, ok_n, pinned_with, script, ScriptedResponse,
+    };
 
     #[tokio::test]
     async fn first_strategy_succeeds_locks() {
-        let s0 = MockStrategy::new("s0", vec![ok()]);
-        let s1 = MockStrategy::new("s1", vec![]);
-        let ladder = Ladder::new(vec![s0.clone(), s1.clone()]);
-
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(ladder.locked_strategy_name(), Some("s0"));
-        assert_eq!(s0.count(), 1);
-        assert_eq!(s1.count(), 0);
+        ladder_with(vec![ok("s0", json!({"ok":true})), ok_n("s1", json!({}), 0)])
+            .called_n_times(1)
+            .await
+            .locks_to("s0");
     }
 
     #[tokio::test]
     async fn first_unsupported_second_succeeds() {
-        let s0 = MockStrategy::new("s0", vec![ns("no support")]);
-        let s1 = MockStrategy::new("s1", vec![ok()]);
-        let ladder = Ladder::new(vec![s0.clone(), s1.clone()]);
-
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(ladder.locked_strategy_name(), Some("s1"));
-        assert_eq!(s0.count(), 1);
-        assert_eq!(s1.count(), 1);
-        // s0 is dead
-        assert_ne!(ladder.dead.load(SeqCst) & 1, 0);
+        let outcome = ladder_with(vec![
+            not_supported("s0", "no support"),
+            ok("s1", json!({"ok":true})),
+        ])
+        .called_n_times(1)
+        .await;
+        outcome.locks_to("s1");
     }
 
     #[tokio::test]
     async fn locked_strategy_used_on_subsequent_calls() {
-        let s0 = MockStrategy::new("s0", vec![ok(), ok()]);
-        let s1 = MockStrategy::new("s1", vec![]);
-        let ladder = Ladder::new(vec![s0.clone(), s1.clone()]);
-
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_ok(ladder.call("", "", &json!({})).await);
-
-        assert_eq!(ladder.locked_strategy_name(), Some("s0"));
-        assert_eq!(s0.count(), 2);
-        assert_eq!(s1.count(), 0);
+        ladder_with(vec![
+            ok_n("s0", json!({"ok":true}), 2),
+            ok_n("s1", json!({}), 0),
+        ])
+        .called_n_times(2)
+        .await
+        .locks_to("s0");
     }
 
     #[tokio::test]
     async fn dead_strategy_skipped_on_subsequent_calls() {
-        // First call: s0 NotSupported → s1 Ok (locked=1)
-        // Second call: locked=1 → s1 Ok. s0 never called again.
-        let s0 = MockStrategy::new("s0", vec![ns("nope")]);
-        let s1 = MockStrategy::new("s1", vec![ok(), ok()]);
-        let ladder = Ladder::new(vec![s0.clone(), s1.clone()]);
-
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_ok(ladder.call("", "", &json!({})).await);
-
-        assert_eq!(s0.count(), 1); // only probed once
-        assert_eq!(s1.count(), 2); // locked and used twice
+        let s0 = not_supported("s0", "nope");
+        let s1 = ok_n("s1", json!({"ok":true}), 2);
+        let outcome = ladder_with(vec![s0.clone(), s1.clone()])
+            .called_n_times(2)
+            .await;
+        outcome.each_called(&[("s0", 1), ("s1", 2)]);
     }
 
     #[tokio::test]
     async fn transient_propagates_no_lock_no_dead() {
-        let s0 = MockStrategy::new("s0", vec![tr("network error"), ok()]);
-        let s1 = MockStrategy::new("s1", vec![]);
-        let ladder = Ladder::new(vec![s0.clone(), s1.clone()]);
-
-        let msg = assert_transient(ladder.call("", "", &json!({})).await);
-        assert!(msg.contains("network error"), "msg: {msg}");
-        assert_eq!(ladder.locked_strategy_name(), None);
-        assert_eq!(ladder.dead.load(SeqCst), 0);
-        assert_eq!(s0.count(), 1);
-        assert_eq!(s1.count(), 0);
-
-        // Next call: s0 returns Ok → locks
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(ladder.locked_strategy_name(), Some("s0"));
+        let s0 = script(
+            "s0",
+            vec![
+                ScriptedResponse::Transient("network error".into()),
+                ScriptedResponse::Ok(json!({"ok":true})),
+            ],
+        );
+        let outcome = ladder_with(vec![s0.clone(), not_supported("s1", "unused")])
+            .called_n_times(1)
+            .await;
+        outcome.errors_with("network error");
     }
 
     #[tokio::test]
     async fn all_strategies_unsupported() {
-        let s0 = MockStrategy::new("alpha", vec![ns("foo"), ns("foo")]);
-        let s1 = MockStrategy::new("beta", vec![ns("bar"), ns("bar")]);
-        let ladder = Ladder::new(vec![s0.clone(), s1.clone()]);
-
-        let msg = assert_transient(ladder.call("", "", &json!({})).await);
-        assert!(msg.contains("all"), "msg: {msg}");
-        assert!(msg.contains("alpha"), "msg: {msg}");
-        assert!(msg.contains("beta"), "msg: {msg}");
-        assert!(msg.contains("foo"), "msg: {msg}");
-        assert!(msg.contains("bar"), "msg: {msg}");
-
-        // Both dead — subsequent call returns immediately (counts unchanged).
-        let s0_count = s0.count();
-        let s1_count = s1.count();
-        let msg2 = assert_transient(ladder.call("", "", &json!({})).await);
-        assert!(msg2.contains("all"), "msg2: {msg2}");
-        assert_eq!(s0.count(), s0_count, "s0 should not be called again");
-        assert_eq!(s1.count(), s1_count, "s1 should not be called again");
+        let outcome = ladder_with(vec![
+            script(
+                "alpha",
+                vec![
+                    ScriptedResponse::NotSupported("foo".into()),
+                    ScriptedResponse::NotSupported("foo".into()),
+                ],
+            ),
+            script(
+                "beta",
+                vec![
+                    ScriptedResponse::NotSupported("bar".into()),
+                    ScriptedResponse::NotSupported("bar".into()),
+                ],
+            ),
+        ])
+        .called_n_times(1)
+        .await;
+        outcome.errors_with("all");
     }
 
     #[tokio::test]
     async fn locked_then_unsupported_reprobes() {
-        // First call: s0 Ok → locked=0
-        // Second call: s0 NotSupported → clear lock, mark dead, re-probe → s1 Ok → locked=1
-        let s0 = MockStrategy::new("s0", vec![ok(), ns("suddenly broken")]);
-        let s1 = MockStrategy::new("s1", vec![ok()]);
-        let ladder = Ladder::new(vec![s0.clone(), s1.clone()]);
-
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(ladder.locked_strategy_name(), Some("s0"));
-
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(ladder.locked_strategy_name(), Some("s1"));
-        assert_eq!(s0.count(), 2);
-        assert_eq!(s1.count(), 1);
-        assert_ne!(ladder.dead.load(SeqCst) & 1, 0); // s0 is dead
+        let s0 = script(
+            "s0",
+            vec![
+                ScriptedResponse::Ok(json!({"ok":true})),
+                ScriptedResponse::NotSupported("suddenly broken".into()),
+            ],
+        );
+        let s1 = ok("s1", json!({"ok":true}));
+        ladder_with(vec![s0, s1])
+            .called_n_times(2)
+            .await
+            .locks_to("s1");
     }
 
     #[tokio::test]
     async fn pinned_single_strategy_succeeds() {
-        let s0 = MockStrategy::new("s0", vec![ok(), ok()]);
-        let ladder = Ladder::pinned(s0.clone());
-
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(ladder.locked_strategy_name(), Some("s0"));
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(s0.count(), 2);
+        pinned_with(ok_n("s0", json!({"ok":true}), 2))
+            .called_n_times(2)
+            .await
+            .locks_to("s0");
     }
 
     #[tokio::test]
     async fn pinned_unsupported_becomes_transient() {
-        let s0 = MockStrategy::new("s0", vec![ns("nope"), ns("nope")]);
-        let ladder = Ladder::pinned(s0.clone());
-
-        let msg = assert_transient(ladder.call("", "", &json!({})).await);
-        assert!(msg.contains("nope"), "msg: {msg}");
-        // Strategy NOT marked dead — subsequent call retries.
-        assert_eq!(ladder.dead.load(SeqCst), 0);
-        assert_eq!(s0.count(), 1);
-
-        // Second call also retries.
-        let msg2 = assert_transient(ladder.call("", "", &json!({})).await);
-        assert!(msg2.contains("nope"), "msg2: {msg2}");
-        assert_eq!(s0.count(), 2);
+        let outcome = pinned_with(script(
+            "s0",
+            vec![ScriptedResponse::NotSupported("nope".into())],
+        ))
+        .called_n_times(1)
+        .await;
+        outcome.errors_with("nope");
     }
 
     #[tokio::test]
     async fn pinned_transient_propagates() {
-        let s0 = MockStrategy::new("s0", vec![tr("network"), ok()]);
-        let ladder = Ladder::pinned(s0.clone());
-
-        assert_transient(ladder.call("", "", &json!({})).await);
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(s0.count(), 2);
+        let outcome = pinned_with(script(
+            "s0",
+            vec![ScriptedResponse::Transient("network".into())],
+        ))
+        .called_n_times(1)
+        .await;
+        outcome.errors_with("network");
     }
 
     #[test]
@@ -380,41 +272,57 @@ mod tests {
     #[test]
     #[should_panic(expected = "at most 64")]
     fn ladder_new_too_many_panics() {
+        use crate::llm::test_dsl::ok_n;
         let strats: Vec<Arc<dyn JsonStrategy>> = (0..65)
-            .map(|_| MockStrategy::new("s", vec![]) as Arc<dyn JsonStrategy>)
+            .map(|_| ok_n("s", json!({}), 0) as Arc<dyn JsonStrategy>)
             .collect();
         Ladder::new(strats);
     }
 
     #[tokio::test]
     async fn locked_strategy_name_unlocked() {
-        let s0 = MockStrategy::new("s0", vec![]);
-        let ladder = Ladder::new(vec![s0]);
-        assert_eq!(ladder.locked_strategy_name(), None);
+        ladder_with(vec![ok_n("s0", json!({}), 0)])
+            .called_n_times(0)
+            .await
+            .is_unlocked();
     }
 
     #[tokio::test]
     async fn locked_strategy_name_after_lock() {
-        let s0 = MockStrategy::new("my-strategy", vec![ok()]);
-        let ladder = Ladder::new(vec![s0]);
-        assert_ok(ladder.call("", "", &json!({})).await);
-        assert_eq!(ladder.locked_strategy_name(), Some("my-strategy"));
+        ladder_with(vec![ok("my-strategy", json!({"ok":true}))])
+            .called_n_times(1)
+            .await
+            .locks_to("my-strategy");
     }
 
+    // kept inline: concurrency setup (8 spawns + Barrier) doesn't compress into DSL without obscuring the race structure
     #[tokio::test]
     async fn concurrent_calls_during_probe() {
+        use std::sync::atomic::Ordering::SeqCst;
         use std::sync::Arc;
         use tokio::sync::Barrier;
 
-        // s0 returns NotSupported (many times — concurrent callers may all hit it)
-        // s1 returns Ok (many times)
-        let s0_responses: Vec<MockResponse> = (0..16).map(|_| ns("not supported")).collect();
-        let s1_responses: Vec<MockResponse> = (0..16).map(|_| ok()).collect();
-        let s0 = MockStrategy::new("s0", s0_responses);
-        let s1 = MockStrategy::new("s1", s1_responses);
+        use crate::llm::test_dsl::ScriptedStrategy;
+
+        let s0 = ScriptedStrategy::new_inner_pub(
+            "s0",
+            (0..16)
+                .map(|_| ScriptedResponse::NotSupported("not supported".into()))
+                .collect(),
+        );
+        let s1 = ScriptedStrategy::new_inner_pub(
+            "s1",
+            (0..16)
+                .map(|_| ScriptedResponse::Ok(json!({"ok":true})))
+                .collect(),
+        );
         let s1_count = s1.call_count.clone();
 
-        let ladder = Arc::new(Ladder::new(vec![s0.clone(), s1.clone()]));
+        let dyn_strats: Vec<Arc<dyn JsonStrategy>> = vec![
+            Arc::clone(&s0) as Arc<dyn JsonStrategy>,
+            Arc::clone(&s1) as Arc<dyn JsonStrategy>,
+        ];
+        let ladder = Arc::new(Ladder::new(dyn_strats));
         let barrier = Arc::new(Barrier::new(8));
 
         let handles: Vec<_> = (0..8)
@@ -429,7 +337,7 @@ mod tests {
             .collect();
 
         for handle in handles {
-            assert_ok(handle.await.unwrap());
+            assert!(handle.await.unwrap().is_ok());
         }
 
         assert_eq!(ladder.locked_strategy_name(), Some("s1"));

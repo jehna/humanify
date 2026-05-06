@@ -237,6 +237,9 @@ pub fn classify_error(status: u16, body: &str) -> StrategyError {
 
 #[cfg(test)]
 mod tests {
+    // DSL not applied: classify_error tests are already ≤ 3 lines each
+    // (assert_transient / assert_not_supported + one call). A DSL wrapper
+    // would add indirection without adding clarity.
     use super::*;
 
     fn not_supported_reason(status: u16, body: &str) -> String {

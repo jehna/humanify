@@ -402,237 +402,222 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn assert_transient(result: Result<Value, StrategyError>) {
-        match result {
-            Err(StrategyError::Transient(_)) => {}
-            Ok(v) => panic!("expected Transient, got Ok({v})"),
-            Err(StrategyError::NotSupported(r)) => {
-                panic!("expected Transient, got NotSupported({r})")
-            }
-        }
-    }
+    use crate::llm::test_dsl::{extract_fails_with, extract_succeeds};
 
     // --- extract_content (OpenAIJsonSchema) ---
 
     #[test]
     fn happy_path() {
-        let response = json!({"choices":[{"message":{"content":"{\"x\":1}"}}]});
-        assert_eq!(extract_content(&response).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_content(&json!({"choices":[{"message":{"content":"{\"x\":1}"}}]})),
+            &json!({"x": 1}),
+        );
     }
 
     #[test]
     fn empty_choices_is_transient() {
-        assert_transient(extract_content(&json!({"choices":[]})));
+        extract_fails_with(extract_content(&json!({"choices":[]})), "");
     }
 
     #[test]
     fn missing_choices_is_transient() {
-        assert_transient(extract_content(&json!({})));
+        extract_fails_with(extract_content(&json!({})), "");
     }
 
     #[test]
     fn content_not_a_string() {
-        assert_transient(extract_content(
-            &json!({"choices":[{"message":{"content":null}}]}),
-        ));
+        extract_fails_with(
+            extract_content(&json!({"choices":[{"message":{"content":null}}]})),
+            "",
+        );
     }
 
     #[test]
     fn content_invalid_json() {
-        assert_transient(extract_content(
-            &json!({"choices":[{"message":{"content":"not json"}}]}),
-        ));
+        extract_fails_with(
+            extract_content(&json!({"choices":[{"message":{"content":"not json"}}]})),
+            "",
+        );
     }
 
     #[test]
     fn content_with_bom_strips_cleanly() {
-        let content = "\u{feff}{\"x\":1}";
-        let response = json!({"choices":[{"message":{"content": content}}]});
-        assert_eq!(extract_content(&response).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_content(&json!({"choices":[{"message":{"content":"\u{feff}{\"x\":1}"}}]})),
+            &json!({"x": 1}),
+        );
     }
 
     #[test]
     fn content_with_leading_whitespace() {
-        let response = json!({"choices":[{"message":{"content":"  {\"x\":1}"}}]});
-        assert_eq!(extract_content(&response).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_content(&json!({"choices":[{"message":{"content":"  {\"x\":1}"}}]})),
+            &json!({"x": 1}),
+        );
     }
 
     #[test]
     fn content_with_markdown_fences() {
-        let content = "```json\n{\"x\":1}\n```";
-        let response = json!({"choices":[{"message":{"content": content}}]});
-        assert_transient(extract_content(&response));
+        extract_fails_with(
+            extract_content(
+                &json!({"choices":[{"message":{"content":"```json\n{\"x\":1}\n```"}}]}),
+            ),
+            "",
+        );
     }
 
     // --- extract_tool_call_arguments ---
 
-    fn tool_call_response(arguments: &str) -> Value {
-        tool_call_response_named(TOOL_NAME, arguments)
-    }
-
-    fn tool_call_response_named(name: &str, arguments: &str) -> Value {
-        json!({
-            "choices": [{
-                "message": {
-                    "tool_calls": [{
-                        "function": {
-                            "name": name,
-                            "arguments": arguments
-                        }
-                    }]
-                }
-            }]
-        })
+    fn tc(name: &str, arguments: &str) -> Value {
+        json!({"choices":[{"message":{"tool_calls":[{"function":{"name":name,"arguments":arguments}}]}}]})
     }
 
     #[test]
     fn tc_happy_path() {
-        let r = tool_call_response("{\"x\":1}");
-        assert_eq!(extract_tool_call_arguments(&r).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_tool_call_arguments(&tc(TOOL_NAME, "{\"x\":1}")),
+            &json!({"x": 1}),
+        );
     }
 
     #[test]
     fn tc_tool_calls_empty() {
-        let r = json!({"choices":[{"message":{"tool_calls":[]}}]});
-        assert_transient(extract_tool_call_arguments(&r));
+        extract_fails_with(
+            extract_tool_call_arguments(&json!({"choices":[{"message":{"tool_calls":[]}}]})),
+            "",
+        );
     }
 
     #[test]
     fn tc_tool_calls_missing() {
-        let r = json!({"choices":[{"message":{}}]});
-        assert_transient(extract_tool_call_arguments(&r));
+        extract_fails_with(
+            extract_tool_call_arguments(&json!({"choices":[{"message":{}}]})),
+            "",
+        );
     }
 
     #[test]
     fn tc_arguments_not_a_string() {
-        let r = json!({
-            "choices": [{
-                "message": {
-                    "tool_calls": [{
-                        "function": { "name": TOOL_NAME, "arguments": {"x": 1} }
-                    }]
-                }
-            }]
-        });
-        assert_transient(extract_tool_call_arguments(&r));
+        extract_fails_with(
+            extract_tool_call_arguments(
+                &json!({"choices":[{"message":{"tool_calls":[{"function":{"name":TOOL_NAME,"arguments":{"x":1}}}]}}]}),
+            ),
+            "",
+        );
     }
 
     #[test]
     fn tc_arguments_invalid_json() {
-        let r = tool_call_response("not json");
-        assert_transient(extract_tool_call_arguments(&r));
+        extract_fails_with(extract_tool_call_arguments(&tc(TOOL_NAME, "not json")), "");
     }
 
     #[test]
     fn tc_arguments_with_bom() {
-        let args = "\u{feff}{\"x\":1}";
-        let r = tool_call_response(args);
-        assert_eq!(extract_tool_call_arguments(&r).unwrap(), json!({"x": 1}));
+        extract_succeeds(
+            extract_tool_call_arguments(&tc(TOOL_NAME, "\u{feff}{\"x\":1}")),
+            &json!({"x": 1}),
+        );
     }
 
     #[test]
     fn tc_wrong_function_name() {
-        let r = tool_call_response_named("something_else", "{\"x\":1}");
-        assert_transient(extract_tool_call_arguments(&r));
+        extract_fails_with(
+            extract_tool_call_arguments(&tc("something_else", "{\"x\":1}")),
+            "",
+        );
     }
 
     #[test]
     fn tc_content_present_alongside_tool_calls() {
-        // content should be completely ignored when tool_calls is present and valid
-        let r = json!({
-            "choices": [{
-                "message": {
-                    "content": "hi",
-                    "tool_calls": [{
-                        "function": { "name": TOOL_NAME, "arguments": "{\"x\":1}" }
-                    }]
-                }
-            }]
-        });
-        assert_eq!(extract_tool_call_arguments(&r).unwrap(), json!({"x": 1}));
+        // content is ignored when tool_calls is present and valid
+        let r = json!({"choices":[{"message":{"content":"hi","tool_calls":[{"function":{"name":TOOL_NAME,"arguments":"{\"x\":1}"}}]}}]});
+        extract_succeeds(extract_tool_call_arguments(&r), &json!({"x": 1}));
     }
 
     // --- extract_prompt_content_as_json ---
 
-    fn prompt_response(content: &str) -> Value {
-        json!({"choices":[{"message":{"content": content}}]})
+    fn pt(content: &str) -> Value {
+        json!({"choices":[{"message":{"content":content}}]})
     }
 
     #[test]
     fn pt_bare_json() {
-        assert_eq!(
-            extract_prompt_content_as_json(&prompt_response("{\"x\":1}")).unwrap(),
-            json!({"x": 1})
+        extract_succeeds(
+            extract_prompt_content_as_json(&pt("{\"x\":1}")),
+            &json!({"x": 1}),
         );
     }
 
     #[test]
     fn pt_json_with_leading_whitespace() {
-        assert_eq!(
-            extract_prompt_content_as_json(&prompt_response("  \n{\"x\":1}")).unwrap(),
-            json!({"x": 1})
+        extract_succeeds(
+            extract_prompt_content_as_json(&pt("  \n{\"x\":1}")),
+            &json!({"x": 1}),
         );
     }
 
     #[test]
     fn pt_fenced_json() {
-        let content = "```json\n{\"x\":1}\n```";
-        assert_eq!(
-            extract_prompt_content_as_json(&prompt_response(content)).unwrap(),
-            json!({"x": 1})
+        extract_succeeds(
+            extract_prompt_content_as_json(&pt("```json\n{\"x\":1}\n```")),
+            &json!({"x": 1}),
         );
     }
 
     #[test]
     fn pt_fenced_no_language() {
-        let content = "```\n{\"x\":1}\n```";
-        assert_eq!(
-            extract_prompt_content_as_json(&prompt_response(content)).unwrap(),
-            json!({"x": 1})
+        extract_succeeds(
+            extract_prompt_content_as_json(&pt("```\n{\"x\":1}\n```")),
+            &json!({"x": 1}),
         );
     }
 
     #[test]
     fn pt_fenced_with_trailing_newline() {
-        let content = "```json\n{\"x\":1}\n```\n";
-        assert_eq!(
-            extract_prompt_content_as_json(&prompt_response(content)).unwrap(),
-            json!({"x": 1})
+        extract_succeeds(
+            extract_prompt_content_as_json(&pt("```json\n{\"x\":1}\n```\n")),
+            &json!({"x": 1}),
         );
     }
 
     #[test]
     fn pt_fenced_with_bom() {
-        let content = "\u{feff}```json\n{\"x\":1}\n```";
-        assert_eq!(
-            extract_prompt_content_as_json(&prompt_response(content)).unwrap(),
-            json!({"x": 1})
+        extract_succeeds(
+            extract_prompt_content_as_json(&pt("\u{feff}```json\n{\"x\":1}\n```")),
+            &json!({"x": 1}),
         );
     }
 
     #[test]
     fn pt_plain_text_no_json() {
-        assert_transient(extract_prompt_content_as_json(&prompt_response(
-            "Sure, here's the answer: 42",
-        )));
+        extract_fails_with(
+            extract_prompt_content_as_json(&pt("Sure, here's the answer: 42")),
+            "",
+        );
     }
 
     #[test]
     fn pt_fenced_invalid_json_inside() {
-        let content = "```json\nnot json\n```";
-        assert_transient(extract_prompt_content_as_json(&prompt_response(content)));
+        extract_fails_with(
+            extract_prompt_content_as_json(&pt("```json\nnot json\n```")),
+            "",
+        );
     }
 
     #[test]
     fn pt_content_not_a_string() {
-        let r = json!({"choices":[{"message":{"content":null}}]});
-        assert_transient(extract_prompt_content_as_json(&r));
+        extract_fails_with(
+            extract_prompt_content_as_json(&json!({"choices":[{"message":{"content":null}}]})),
+            "",
+        );
     }
 
     #[test]
     fn pt_content_with_prose_then_fence() {
-        // Prose before the fence → content doesn't start with ``` → no stripping → Transient
-        let content = "Here you go:\n```json\n{\"x\":1}\n```";
-        assert_transient(extract_prompt_content_as_json(&prompt_response(content)));
+        // Prose before fence → content doesn't start with ``` → no stripping → Transient
+        extract_fails_with(
+            extract_prompt_content_as_json(&pt("Here you go:\n```json\n{\"x\":1}\n```")),
+            "",
+        );
     }
 }

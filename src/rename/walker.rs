@@ -230,173 +230,133 @@ fn compute_context_window(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use super::super::test_dsl::{fixed, identity, queue, recording, scenario, suffix};
     use super::*;
-    use std::collections::VecDeque;
-
-    // --- MockRenamer ---
-
-    enum MockRenamer {
-        Identity,
-        Fixed(String),
-        Queue(VecDeque<String>),
-        Suffix(String),
-        Recording {
-            suffix: String,
-            calls: Vec<(String, String)>,
-        },
-    }
-
-    impl Renamer for MockRenamer {
-        fn rename(&mut self, original: &str, surrounding: &str) -> String {
-            match self {
-                MockRenamer::Identity => original.to_string(),
-                MockRenamer::Fixed(name) => name.clone(),
-                MockRenamer::Queue(q) => q.pop_front().unwrap_or_else(|| original.to_string()),
-                MockRenamer::Suffix(sfx) => format!("{original}{sfx}"),
-                MockRenamer::Recording { suffix, calls } => {
-                    let new_name = format!("{original}{suffix}");
-                    calls.push((original.to_string(), surrounding.to_string()));
-                    new_name
-                }
-            }
-        }
-    }
-
-    fn identity() -> MockRenamer {
-        MockRenamer::Identity
-    }
-
-    fn fixed(name: &str) -> MockRenamer {
-        MockRenamer::Fixed(name.to_string())
-    }
-
-    fn queue(names: &[&str]) -> MockRenamer {
-        MockRenamer::Queue(names.iter().map(|s| s.to_string()).collect())
-    }
-
-    fn suffix(sfx: &str) -> MockRenamer {
-        MockRenamer::Suffix(sfx.to_string())
-    }
-
-    fn recording(sfx: &str) -> MockRenamer {
-        MockRenamer::Recording {
-            suffix: sfx.to_string(),
-            calls: Vec::new(),
-        }
-    }
-
-    fn run(source: &str, renamer: &mut dyn Renamer) -> String {
-        rename_all_identifiers(source, renamer, 500).unwrap()
-    }
-
-    // Helper: strip trailing newline added by oxc codegen for comparison.
-    fn norm(s: &str) -> &str {
-        s.trim_end_matches('\n')
-    }
-
-    // --- Test cases ---
 
     #[test]
     fn no_op_returns_same_code() {
-        let out = run("const a = 1;", &mut identity());
-        assert_eq!(norm(&out), "const a = 1;");
+        scenario("const a = 1;")
+            .renamed_with(identity())
+            .yields("const a = 1;");
     }
 
     #[test]
     fn no_op_returns_same_empty_code() {
-        let out = rename_all_identifiers("", &mut identity(), 500).unwrap();
+        let out = rename_all_identifiers("", &mut super::super::test_dsl::identity(), 500).unwrap();
         assert_eq!(out, "");
     }
 
     #[test]
     fn renames_simple_variable() {
-        let out = run("const a = 1;", &mut fixed("b"));
-        assert_eq!(norm(&out), "const b = 1;");
+        scenario("const a = 1;")
+            .renamed_with(fixed("b"))
+            .yields("const b = 1;");
     }
 
     #[test]
     fn renames_across_scopes() {
-        // codegen-formatting differs from v1
-        let out = run("const a = 1; (function () { a = 2; });", &mut fixed("b"));
-        assert!(out.contains("const b = 1"), "expected 'const b': {out}");
-        assert!(out.contains("b = 2"), "expected 'b = 2': {out}");
-        assert!(!out.contains('a'), "should have no 'a' left: {out}");
+        let out = scenario("const a = 1; (function () { a = 2; });")
+            .with_context_size(500)
+            .renamed_with(fixed("b"));
+        assert!(
+            out.output().contains("const b = 1"),
+            "expected 'const b': {}",
+            out.output()
+        );
+        assert!(
+            out.output().contains("b = 2"),
+            "expected 'b = 2': {}",
+            out.output()
+        );
+        assert!(
+            !out.output().contains('a'),
+            "should have no 'a' left: {}",
+            out.output()
+        );
     }
 
     #[test]
     fn renames_two_scopes_largest_first() {
-        // const a = 1; (function () { const b = 2; });  → queue ["c","d"]
-        // Largest scope = program scope (a); inner scope (b) second.
-        let out = run(
-            "const a = 1; (function () { const b = 2; });",
-            &mut queue(&["c", "d"]),
+        let out = scenario("const a = 1; (function () { const b = 2; });")
+            .with_context_size(500)
+            .renamed_with(queue(&["c", "d"]));
+        assert!(
+            out.output().contains("const c = 1"),
+            "expected c: {}",
+            out.output()
         );
-        assert!(out.contains("const c = 1"), "expected c: {out}");
-        assert!(out.contains("const d = 2"), "expected d: {out}");
+        assert!(
+            out.output().contains("const d = 2"),
+            "expected d: {}",
+            out.output()
+        );
     }
 
     #[test]
     fn renames_shadowed_variables() {
-        // Two independent bindings named 'a' in different scopes — each gets
-        // its own rename call since visited-set is keyed by symbol_id.
-        let out = run(
-            "const a = 1; (function () { const a = 2; });",
-            &mut queue(&["b", "c"]),
+        // Two independent bindings named 'a' — each gets its own rename call (symbol_id keyed).
+        let out = scenario("const a = 1; (function () { const a = 2; });")
+            .with_context_size(500)
+            .renamed_with(queue(&["b", "c"]));
+        assert!(
+            out.output().contains("const b = 1"),
+            "expected outer b: {}",
+            out.output()
         );
-        assert!(out.contains("const b = 1"), "expected outer b: {out}");
-        assert!(out.contains("const c = 2"), "expected inner c: {out}");
+        assert!(
+            out.output().contains("const c = 2"),
+            "expected inner c: {}",
+            out.output()
+        );
     }
 
     #[test]
     fn does_not_rename_class_methods() {
-        // class Foo { bar() {} } — only Foo is a binding; bar is a method key, not a binding.
-        // suffix renamer adds "_changed": Foo → Foo_changed
-        // codegen-formatting differs from v1
-        let out = run("class Foo { bar() {} }", &mut suffix("_changed"));
-        assert!(out.contains("Foo_changed"), "expected Foo_changed: {out}");
-        // bar should appear unchanged (it's a method name, not a binding identifier)
-        assert!(out.contains("bar"), "expected bar unchanged: {out}");
+        let out = scenario("class Foo { bar() {} }")
+            .with_context_size(500)
+            .renamed_with(suffix("_changed"));
         assert!(
-            !out.contains("bar_changed"),
-            "bar should not be renamed: {out}"
+            out.output().contains("Foo_changed"),
+            "expected Foo_changed: {}",
+            out.output()
+        );
+        assert!(
+            out.output().contains("bar"),
+            "expected bar unchanged: {}",
+            out.output()
+        );
+        assert!(
+            !out.output().contains("bar_changed"),
+            "bar should not be renamed: {}",
+            out.output()
         );
     }
 
     #[test]
     fn passes_surrounding_scope_argument() {
         let input = "const a = 1;\nfunction foo() {\n  const b = 2;\n\n  class Bar {\n    baz = 3;\n    hello() {\n      const y = 123;\n    }\n  }\n};\n";
-        let mut rec = recording("_changed");
-        let _ = rename_all_identifiers(input, &mut rec, 500).unwrap();
-        let calls = match &rec {
-            MockRenamer::Recording { calls, .. } => calls.clone(),
-            _ => unreachable!(),
-        };
-
-        // Exactly 5 calls: a, foo, b, Bar, y (in that order — largest scope first).
+        let (_, log) = scenario(input)
+            .with_context_size(500)
+            .with_recording(recording("_changed"));
         assert_eq!(
-            calls.len(),
+            log.0.len(),
             5,
-            "expected 5 calls, got {}: {calls:?}",
-            calls.len()
+            "expected 5 calls, got {}: {:?}",
+            log.0.len(),
+            log.0
         );
-
-        let names: Vec<&str> = calls.iter().map(|(n, _)| n.as_str()).collect();
+        let names: Vec<&str> = log.0.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(
             names,
             &["a", "foo", "b", "Bar", "y"],
             "wrong name order: {names:?}"
         );
-
-        // The scope passed for 'b' (index 2) should contain 'foo_changed' because
-        // 'foo' was renamed before 'b' is processed and codegen reflects prior renames.
-        // Actually: the surrounding_code is sliced from the *original source* (we don't
-        // re-generate between calls), so it will contain the original 'foo' text.
-        // v1 mutates the AST between calls; we slice source spans from original source.
-        // The structural assertion that matters: scope for 'b' contains the function body.
-        let b_scope = &calls[2].1;
+        let b_scope = &log.0[2].1;
         assert!(
             b_scope.contains("const b = 2"),
-            "scope for 'b' should contain 'const b = 2': {b_scope}"
+            "scope for 'b' should contain declaration: {b_scope}"
         );
         assert!(
             b_scope.contains("foo"),
@@ -406,14 +366,11 @@ mod tests {
 
     #[test]
     fn scopes_renamed_largest_to_smallest() {
-        // Nested scopes: expect names visited outermost first.
         let input = "function foo() { function bar() { function baz() { const qux = 1; } } }";
-        let mut rec = recording("_x");
-        let _ = rename_all_identifiers(input, &mut rec, 500).unwrap();
-        let names: Vec<&str> = match &rec {
-            MockRenamer::Recording { calls, .. } => calls.iter().map(|(n, _)| n.as_str()).collect(),
-            _ => unreachable!(),
-        };
+        let (_, log) = scenario(input)
+            .with_context_size(500)
+            .with_recording(recording("_x"));
+        let names: Vec<&str> = log.0.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(
             names,
             &["foo", "bar", "baz", "qux"],
@@ -423,22 +380,15 @@ mod tests {
 
     #[test]
     fn each_variable_renamed_only_once() {
-        // splitString-style: multiple params with same names across functions.
-        // key: visited set is by original name — if two bindings share a name, renamer
-        // is only called once.
         let input = "function splitString(a, e, t, n, r, i) { return a + e + t + n + r + i; }";
-        let mut rec = recording("_x");
-        let _ = rename_all_identifiers(input, &mut rec, 500).unwrap();
-        let names: Vec<&str> = match &rec {
-            MockRenamer::Recording { calls, .. } => calls.iter().map(|(n, _)| n.as_str()).collect(),
-            _ => unreachable!(),
-        };
-        // splitString is the outermost binding; a,e,t,n,r,i are params.
+        let (_, log) = scenario(input)
+            .with_context_size(500)
+            .with_recording(recording("_x"));
+        let names: Vec<&str> = log.0.iter().map(|(n, _)| n.as_str()).collect();
         assert!(
             names.contains(&"splitString"),
             "expected splitString: {names:?}"
         );
-        // Each unique name should appear exactly once.
         let unique: HashSet<_> = names.iter().collect();
         assert_eq!(
             unique.len(),
@@ -449,22 +399,12 @@ mod tests {
 
     #[test]
     fn scope_is_from_declaration_site() {
-        // function foo() { if (true) { if (true) { let a = 1; a.toString(); } } }
-        // 'a' is declared inside the if blocks, but its binding-introducing ancestor is
-        // the block where it's declared. Since the whole function fits within context_size=200,
-        // the scope string should contain both ends of the source.
         let input = "function foo() { if (true) { if (true) { let a = 1; a.toString(); } } }";
-        let mut calls: Vec<(String, String)> = Vec::new();
-        let mut rec = MockRenamer::Recording {
-            suffix: "_x".to_string(),
-            calls: Vec::new(),
-        };
-        let _ = rename_all_identifiers(input, &mut rec, 200).unwrap();
-        if let MockRenamer::Recording { calls: ref c, .. } = rec {
-            calls = c.clone();
-        }
-        // Find the scope passed for 'a'.
-        let a_scope = calls
+        let (_, log) = scenario(input)
+            .with_context_size(200)
+            .with_recording(recording("_x"));
+        let a_scope = log
+            .0
             .iter()
             .find(|(n, _)| n == "a")
             .map(|(_, s)| s.as_str())
@@ -481,43 +421,34 @@ mod tests {
 
     #[test]
     fn surrounding_code_for_program_level_binding_is_full_source() {
-        // Top-level binding: surrounding_code should be the entire source text.
         let input = "const x = 1;";
-        let mut rec = MockRenamer::Recording {
-            suffix: "_y".to_string(),
-            calls: Vec::new(),
-        };
-        let _ = rename_all_identifiers(input, &mut rec, 500).unwrap();
-        let calls = match &rec {
-            MockRenamer::Recording { calls, .. } => calls.clone(),
-            _ => unreachable!(),
-        };
-        let scope = calls
+        let (_, log) = scenario(input)
+            .with_context_size(500)
+            .with_recording(recording("_y"));
+        let scope = log
+            .0
             .iter()
             .find(|(n, _)| n == "x")
             .map(|(_, s)| s.as_str())
-            .expect("expected a call for 'x'");
-        assert_eq!(scope, input, "surrounding_code for top-level binding should be the full source");
+            .expect("expected call for 'x'");
+        assert_eq!(
+            scope, input,
+            "surrounding_code for top-level binding should be the full source"
+        );
     }
 
     #[test]
     fn surrounding_code_for_inner_binding_excludes_outer_code() {
-        // Inner binding: surrounding_code should be the function body, NOT the outer variable.
         let input = "const outer = 99; function fn1() { const inner = 1; }";
-        let mut rec = MockRenamer::Recording {
-            suffix: "_y".to_string(),
-            calls: Vec::new(),
-        };
-        let _ = rename_all_identifiers(input, &mut rec, 500).unwrap();
-        let calls = match &rec {
-            MockRenamer::Recording { calls, .. } => calls.clone(),
-            _ => unreachable!(),
-        };
-        let inner_scope = calls
+        let (_, log) = scenario(input)
+            .with_context_size(500)
+            .with_recording(recording("_y"));
+        let inner_scope = log
+            .0
             .iter()
             .find(|(n, _)| n == "inner")
             .map(|(_, s)| s.as_str())
-            .expect("expected a call for 'inner'");
+            .expect("expected call for 'inner'");
         assert!(
             inner_scope.contains("const inner = 1"),
             "inner scope should contain its own declaration: {inner_scope}"
@@ -530,29 +461,19 @@ mod tests {
 
     #[test]
     fn surrounding_code_is_truncated_by_context_size() {
-        // With a small context_size, the surrounding_code for an inner binding is truncated.
         let input = "function big() { const x = 1; const y = 2; const z = 3; const w = 4; }";
-        let mut rec = MockRenamer::Recording {
-            suffix: "_y".to_string(),
-            calls: Vec::new(),
-        };
-        let _ = rename_all_identifiers(input, &mut rec, 20).unwrap();
-        let calls = match &rec {
-            MockRenamer::Recording { calls, .. } => calls.clone(),
-            _ => unreachable!(),
-        };
-        // x is a binding inside 'big'; with context_size=20 its surrounding_code
-        // should be the first 20 bytes of the function scope, not the full source.
-        let x_scope = calls
+        let (_, log) = scenario(input)
+            .with_context_size(20)
+            .with_recording(recording("_y"));
+        let x_scope = log
+            .0
             .iter()
             .find(|(n, _)| n == "x")
             .map(|(_, s)| s.as_str())
-            .expect("expected a call for 'x'");
-        // context_size=20 means we get at most 20 chars of the scope — which is shorter
-        // than the full source (69 chars). Allow a small off-by-one from span boundaries.
+            .expect("expected call for 'x'");
         assert!(
             x_scope.len() < input.len(),
-            "surrounding_code should be truncated (shorter than full source), got {} bytes: {x_scope:?}",
+            "surrounding_code should be truncated, got {} bytes: {x_scope:?}",
             x_scope.len()
         );
         assert!(
@@ -563,106 +484,127 @@ mod tests {
 
     #[test]
     fn does_not_rename_object_properties() {
-        // const c = 2; const a = { b: c }; a.b;
-        // bindings: c, a — b is a property key (not a binding).
-        // codegen-formatting differs from v1
-        let out = run(
-            "const c = 2; const a = { b: c }; a.b;",
-            &mut queue(&["d", "e"]),
-        );
-        // c → d (outermost or same level), a → e
-        // b should be unchanged as a property key
+        let out = scenario("const c = 2; const a = { b: c }; a.b;")
+            .with_context_size(500)
+            .renamed_with(queue(&["d", "e"]));
         assert!(
-            out.contains("b:") || out.contains("b :"),
-            "property b should survive: {out}"
+            out.output().contains("b:") || out.output().contains("b :"),
+            "property b should survive: {}",
+            out.output()
         );
-        assert!(!out.contains("const c"), "c should be renamed: {out}");
-        assert!(!out.contains("const a"), "a should be renamed: {out}");
+        assert!(
+            !out.output().contains("const c"),
+            "c should be renamed: {}",
+            out.output()
+        );
+        assert!(
+            !out.output().contains("const a"),
+            "a should be renamed: {}",
+            out.output()
+        );
     }
 
     #[test]
     fn handles_invalid_identifiers() {
-        // renamer returns "this.kLength" → safe_name → "thisKLength"
-        let out = run("const a = 1;", &mut fixed("this.kLength"));
-        assert!(out.contains("thisKLength"), "expected thisKLength: {out}");
+        scenario("const a = 1;")
+            .with_context_size(500)
+            .renamed_with(fixed("this.kLength"))
+            .yields("const thisKLength = 1;");
     }
 
     #[test]
     fn handles_space_in_identifier() {
-        // renamer returns "foo bar" → safe_name → "fooBar"
-        let out = run("const a = 1;", &mut fixed("foo bar"));
-        assert!(out.contains("fooBar"), "expected fooBar: {out}");
+        scenario("const a = 1;")
+            .with_context_size(500)
+            .renamed_with(fixed("foo bar"))
+            .yields("const fooBar = 1;");
     }
 
     #[test]
     fn handles_reserved_identifiers() {
-        // renamer returns "static" → safe_name → "_static"
-        let out = run("const a = 1;", &mut fixed("static"));
-        assert!(out.contains("_static"), "expected _static: {out}");
+        let out = scenario("const a = 1;")
+            .with_context_size(500)
+            .renamed_with(fixed("static"));
+        assert!(
+            out.output().contains("_static"),
+            "expected _static: {}",
+            out.output()
+        );
     }
 
     #[test]
     fn handles_multiple_same_name() {
-        // const a = 1; const b = 1; → both renamed to "foo"
-        // First gets "foo", second would collide → "_foo"
-        // BUT: visited-set skips second because 'b' is a different original name.
-        // Actually: a → "foo", b → "foo" collides → "_foo"
-        let out = run("const a = 1; const b = 1;", &mut fixed("foo"));
-        assert!(out.contains("const foo = 1"), "expected foo: {out}");
-        assert!(out.contains("const _foo = 1"), "expected _foo: {out}");
+        let out = scenario("const a = 1; const b = 1;")
+            .with_context_size(500)
+            .renamed_with(fixed("foo"));
+        assert!(
+            out.output().contains("const foo = 1"),
+            "expected foo: {}",
+            out.output()
+        );
+        assert!(
+            out.output().contains("const _foo = 1"),
+            "expected _foo: {}",
+            out.output()
+        );
     }
 
     #[test]
     fn handles_multiple_props_same_name() {
-        // const foo = 1; const bar = 2; → both renamed to "bar"
-        // 'bar' already exists as a binding; first rename of 'foo' → 'bar' collides → '_bar'
-        // Then 'bar' itself → 'bar' but 'bar' was already renamed away...
-        // Actually: largest scope first. Both are program-level so sorted by position.
-        // 'foo' first (pos 0) → renamed to "bar", but 'bar' binding exists → "_bar"
-        // 'bar' next → renamed to "bar", 'bar' is now free (was renamed to '_bar' above?
-        //   No — 'bar' hasn't been renamed yet at this point. find_binding checks current
-        //   scoping state. After 'foo' → '_bar', 'bar' still exists.
-        //   'bar' → "bar": find_binding finds 'bar' binding → "_bar", but "_bar" is taken → "__bar"?
-        // v1 test: "const foo = 1; const bar = 2;" → "const _bar = 1; const bar = 2;"
-        // That implies: foo → "bar" collides with existing bar binding → "_bar"
-        //               bar → "bar", no more collision (foo was renamed, bar binding was foo) → "bar"
-        let out = run("const foo = 1; const bar = 2;", &mut fixed("bar"));
-        // foo should become _bar (collides with existing bar)
-        assert!(out.contains("_bar"), "expected _bar for renamed foo: {out}");
-        // bar itself should become bar (no collision after foo was renamed away)
+        let out = scenario("const foo = 1; const bar = 2;")
+            .with_context_size(500)
+            .renamed_with(fixed("bar"));
         assert!(
-            out.contains("const bar = 2"),
-            "expected bar to stay bar: {out}"
+            out.output().contains("_bar"),
+            "expected _bar for renamed foo: {}",
+            out.output()
+        );
+        assert!(
+            out.output().contains("const bar = 2"),
+            "expected bar to stay bar: {}",
+            out.output()
         );
     }
 
     #[test]
     fn does_not_crash_on_arguments_assign() {
-        // function foo() { arguments = '??'; } → rename foo to "foobar"
-        // arguments is not a binding identifier in normal AST; should not crash.
-        let out = run("function foo() { arguments = '??'; }", &mut fixed("foobar"));
-        assert!(out.contains("foobar"), "expected foobar: {out}");
+        let out = scenario("function foo() { arguments = '??'; }")
+            .with_context_size(500)
+            .renamed_with(fixed("foobar"));
+        assert!(
+            out.output().contains("foobar"),
+            "expected foobar: {}",
+            out.output()
+        );
     }
-
-    // --- oxc-specific tests ---
 
     #[test]
     fn unicode_identifier() {
-        // const café = 1; → rename to "x"
-        let out = run("const café = 1;", &mut fixed("x"));
-        assert!(out.contains("const x = 1"), "expected x: {out}");
+        let out = scenario("const café = 1;")
+            .with_context_size(500)
+            .renamed_with(fixed("x"));
+        assert!(
+            out.output().contains("const x = 1"),
+            "expected x: {}",
+            out.output()
+        );
     }
 
     #[test]
     fn private_class_field() {
-        // class A { #x = 1; m() { return this.#x; } }
-        // Private fields may or may not surface as binding identifiers in oxc.
-        // Either way: identity renamer must not crash, output must round-trip.
         let input = "class A { #x = 1; m() { return this.#x; } }";
-        let out = run(input, &mut identity());
-        // 'A' is a binding; it should be present unchanged.
-        assert!(out.contains('A'), "expected class A in output: {out}");
-        // Private field access should survive codegen.
-        assert!(out.contains("#x"), "expected #x in output: {out}");
+        let out = scenario(input)
+            .with_context_size(500)
+            .renamed_with(identity());
+        assert!(
+            out.output().contains('A'),
+            "expected class A in output: {}",
+            out.output()
+        );
+        assert!(
+            out.output().contains("#x"),
+            "expected #x in output: {}",
+            out.output()
+        );
     }
 }

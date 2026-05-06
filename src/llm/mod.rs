@@ -3,6 +3,8 @@ pub mod http;
 pub mod ladder;
 pub mod openai_compat;
 pub mod renamer;
+#[cfg(test)]
+pub mod test_dsl;
 
 use async_trait::async_trait;
 use serde_json::Value;
