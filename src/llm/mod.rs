@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 pub use http::{classify_error, HttpClient, StrategyError};
-pub use openai_compat::OpenAIJsonSchema;
+pub use openai_compat::{ForcedToolCall, OpenAIJsonSchema, PromptToJson, ToolCallAndPrompt};
 
 #[async_trait]
 pub trait JsonStrategy: Send + Sync {
