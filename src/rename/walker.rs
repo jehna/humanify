@@ -356,6 +356,10 @@ mod tests {
         assert!(out.contains("Foo_changed"), "expected Foo_changed: {out}");
         // bar should appear unchanged (it's a method name, not a binding identifier)
         assert!(out.contains("bar"), "expected bar unchanged: {out}");
+        assert!(
+            !out.contains("bar_changed"),
+            "bar should not be renamed: {out}"
+        );
     }
 
     #[test]
