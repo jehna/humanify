@@ -6,6 +6,14 @@ edition = "2021"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
+oxc_allocator = "0.126.0"
+oxc_ast = "0.126.0"
+oxc_parser = "0.126.0"
+oxc_semantic = "0.126.0"
+oxc_codegen = "0.126.0"
+oxc_span = "0.126.0"
+thiserror = "2.0.18"
+oxc_str = "0.126.0"
 
 [dev-dependencies]
 tempfile = "3"
