@@ -120,6 +120,11 @@ impl Ladder {
         )))
     }
 
+    #[cfg(test)]
+    pub(crate) fn strategy_count(&self) -> usize {
+        self.strategies.len()
+    }
+
     pub fn locked_strategy_name(&self) -> Option<&'static str> {
         let idx = self.locked.load(SeqCst);
         if idx == UNLOCKED {

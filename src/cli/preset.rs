@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::llm::{
-    http::HttpClient, ForcedToolCall, JsonStrategy, Ladder, LlmRenamer, OpenAIJsonSchema,
-    PromptToJson, ToolCallAndPrompt,
+    http::HttpClient, AnthropicNativeJsonSchema, AnthropicToolCallAndPrompt, ForcedToolCall,
+    JsonStrategy, Ladder, LlmRenamer, OpenAIJsonSchema, PromptToJson, ToolCallAndPrompt,
 };
 use crate::pipe;
 use crate::rename::{rename_all_identifiers, RenameError};
@@ -46,20 +46,19 @@ pub struct PresetArgs {
 
 /// Returns Err with a user-facing message if `mode` is not valid for `kind`.
 pub fn validate_json_mode_for_provider(mode: &JsonMode, kind: ProviderKind) -> Result<(), String> {
-    match kind {
-        ProviderKind::OpenAICompat => {
-            if *mode == JsonMode::AnthropicNative {
-                return Err(
-                    "--json-mode anthropic-native is only valid for the `anthropic` subcommand"
-                        .to_string(),
-                );
-            }
-        }
-        ProviderKind::Anthropic => {
-            // Cross-provider checks for Anthropic are added in task #14.
-        }
+    match (mode, kind) {
+        (JsonMode::AnthropicNative, ProviderKind::OpenAICompat) => Err(
+            "--json-mode anthropic-native is only valid for the `anthropic` subcommand".to_string(),
+        ),
+        (
+            JsonMode::OpenAIJsonSchema | JsonMode::ForcedToolCall | JsonMode::ToolCallAndPrompt | JsonMode::Prompt,
+            ProviderKind::Anthropic,
+        ) => Err(format!(
+            "--json-mode {} is not valid for the `anthropic` subcommand; use anthropic-native or ladder",
+            mode.as_str()
+        )),
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 /// Drives the full pipeline for any preset. Returns process exit code (0 / 1 / 2 / 64).
@@ -106,7 +105,7 @@ pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
     };
 
     let client = HttpClient::new();
-    let ladder = Arc::new(build_ladder(client, &cfg));
+    let ladder = Arc::new(build_ladder(client, &cfg, defaults.provider_kind));
     let mut renamer = LlmRenamer::new(Arc::clone(&ladder), rt.handle().clone());
     let context_size = cfg.context_size;
 
@@ -142,9 +141,9 @@ pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
     0
 }
 
-fn build_ladder(client: HttpClient, cfg: &PresetConfig) -> Ladder {
+fn build_ladder(client: HttpClient, cfg: &PresetConfig, kind: ProviderKind) -> Ladder {
     match cfg.json_mode {
-        JsonMode::Ladder => build_default_ladder(client, cfg),
+        JsonMode::Ladder => build_default_ladder(client, cfg, kind),
         JsonMode::OpenAIJsonSchema => Ladder::pinned(Arc::new(OpenAIJsonSchema::new(
             client,
             cfg.base_url.clone(),
@@ -169,31 +168,56 @@ fn build_ladder(client: HttpClient, cfg: &PresetConfig) -> Ladder {
             cfg.api_key.clone(),
             cfg.model.clone(),
         ))),
-        JsonMode::AnthropicNative => unreachable!("rejected before build_ladder"),
-    }
-}
-
-fn build_default_ladder(client: HttpClient, cfg: &PresetConfig) -> Ladder {
-    let strategies: Vec<Arc<dyn JsonStrategy>> = vec![
-        Arc::new(OpenAIJsonSchema::new(
-            client.clone(),
-            cfg.base_url.clone(),
-            cfg.api_key.clone(),
-            cfg.model.clone(),
-        )),
-        Arc::new(ForcedToolCall::new(
-            client.clone(),
-            cfg.base_url.clone(),
-            cfg.api_key.clone(),
-            cfg.model.clone(),
-        )),
-        Arc::new(PromptToJson::new(
+        JsonMode::AnthropicNative => Ladder::pinned(Arc::new(AnthropicNativeJsonSchema::new(
             client,
             cfg.base_url.clone(),
             cfg.api_key.clone(),
             cfg.model.clone(),
-        )),
-    ];
+        ))),
+    }
+}
+
+pub(crate) fn build_default_ladder(
+    client: HttpClient,
+    cfg: &PresetConfig,
+    kind: ProviderKind,
+) -> Ladder {
+    let strategies: Vec<Arc<dyn JsonStrategy>> = match kind {
+        ProviderKind::OpenAICompat => vec![
+            Arc::new(OpenAIJsonSchema::new(
+                client.clone(),
+                cfg.base_url.clone(),
+                cfg.api_key.clone(),
+                cfg.model.clone(),
+            )),
+            Arc::new(ForcedToolCall::new(
+                client.clone(),
+                cfg.base_url.clone(),
+                cfg.api_key.clone(),
+                cfg.model.clone(),
+            )),
+            Arc::new(PromptToJson::new(
+                client,
+                cfg.base_url.clone(),
+                cfg.api_key.clone(),
+                cfg.model.clone(),
+            )),
+        ],
+        ProviderKind::Anthropic => vec![
+            Arc::new(AnthropicNativeJsonSchema::new(
+                client.clone(),
+                cfg.base_url.clone(),
+                cfg.api_key.clone(),
+                cfg.model.clone(),
+            )),
+            Arc::new(AnthropicToolCallAndPrompt::new(
+                client,
+                cfg.base_url.clone(),
+                cfg.api_key.clone(),
+                cfg.model.clone(),
+            )),
+        ],
+    };
     Ladder::new(strategies)
 }
 
@@ -222,6 +246,17 @@ impl JsonMode {
                  anthropic-native, forced-tool-call, tool-call-and-prompt, prompt",
                 other
             )),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            JsonMode::Ladder => "ladder",
+            JsonMode::OpenAIJsonSchema => "openai-json-schema",
+            JsonMode::AnthropicNative => "anthropic-native",
+            JsonMode::ForcedToolCall => "forced-tool-call",
+            JsonMode::ToolCallAndPrompt => "tool-call-and-prompt",
+            JsonMode::Prompt => "prompt",
         }
     }
 }
@@ -345,6 +380,54 @@ mod tests {
         );
     }
 
+    #[test]
+    fn validate_openai_json_schema_on_anthropic_returns_err() {
+        assert!(validate_json_mode_for_provider(
+            &JsonMode::OpenAIJsonSchema,
+            ProviderKind::Anthropic
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_forced_tool_call_on_anthropic_returns_err() {
+        assert!(validate_json_mode_for_provider(
+            &JsonMode::ForcedToolCall,
+            ProviderKind::Anthropic
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_tool_call_and_prompt_on_anthropic_returns_err() {
+        assert!(validate_json_mode_for_provider(
+            &JsonMode::ToolCallAndPrompt,
+            ProviderKind::Anthropic
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_prompt_on_anthropic_returns_err() {
+        assert!(
+            validate_json_mode_for_provider(&JsonMode::Prompt, ProviderKind::Anthropic).is_err()
+        );
+    }
+
+    #[test]
+    fn validate_ladder_on_anthropic_returns_ok() {
+        assert!(
+            validate_json_mode_for_provider(&JsonMode::Ladder, ProviderKind::Anthropic).is_ok()
+        );
+    }
+
+    #[test]
+    fn validate_prompt_on_openai_compat_returns_ok() {
+        assert!(
+            validate_json_mode_for_provider(&JsonMode::Prompt, ProviderKind::OpenAICompat).is_ok()
+        );
+    }
+
     // --- PresetDefaults sanity ---
 
     #[test]
@@ -365,6 +448,19 @@ mod tests {
         );
         assert_eq!(crate::cli::gemini::DEFAULTS.model, "gemini-2.0-flash-lite");
         assert_eq!(crate::cli::gemini::DEFAULTS.api_key_env, "GEMINI_API_KEY");
+    }
+
+    #[test]
+    fn anthropic_defaults_constants() {
+        assert_eq!(
+            crate::cli::anthropic::DEFAULTS.base_url,
+            "https://api.anthropic.com/v1"
+        );
+        assert_eq!(crate::cli::anthropic::DEFAULTS.model, "claude-sonnet-4-6");
+        assert_eq!(
+            crate::cli::anthropic::DEFAULTS.api_key_env,
+            "ANTHROPIC_API_KEY"
+        );
     }
 
     // --- run_preset early-exit paths (no I/O reached) ---
@@ -395,5 +491,21 @@ mod tests {
     fn unknown_json_mode_returns_64() {
         let code = run_preset(preset_args_no_io("garbage"), crate::cli::openai::DEFAULTS);
         assert_eq!(code, 64);
+    }
+
+    // --- Anthropic default ladder shape ---
+
+    #[test]
+    fn anthropic_default_ladder_has_two_strategies() {
+        let cfg = PresetConfig {
+            base_url: "https://api.anthropic.com/v1".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
+            api_key: None,
+            json_mode: JsonMode::Ladder,
+            context_size: 500,
+            verbose: false,
+        };
+        let ladder = build_default_ladder(HttpClient::new(), &cfg, ProviderKind::Anthropic);
+        assert_eq!(ladder.strategy_count(), 2);
     }
 }
