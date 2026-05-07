@@ -1,5 +1,14 @@
 use std::env;
 
+pub struct PresetConfig {
+    pub base_url: String,
+    pub model: String,
+    pub api_key: Option<String>,
+    pub json_mode: JsonMode,
+    pub context_size: usize,
+    pub verbose: bool,
+}
+
 /// Selects which JSON strategy (or ladder) to use for a run.
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsonMode {
