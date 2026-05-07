@@ -1,5 +1,5 @@
 use clap::{error::ErrorKind, Parser, Subcommand};
-use humanify::cli::{anthropic, gemini, openai};
+use humanify::cli::{anthropic, gemini, ollama, openai};
 use std::path::PathBuf;
 
 const EXIT_CLI_USAGE: i32 = 64;
@@ -97,6 +97,19 @@ fn into_anthropic_args(a: SubArgs) -> anthropic::Args {
     }
 }
 
+fn into_ollama_args(a: SubArgs) -> ollama::Args {
+    ollama::Args {
+        input: a.input,
+        output: a.output,
+        model: a.model,
+        api_key: a.api_key,
+        base_url: a.base_url,
+        context_size: a.context_size,
+        json_mode: a.json_mode,
+        verbose: a.verbose,
+    }
+}
+
 fn main() {
     let cli = match Cli::try_parse() {
         Ok(c) => c,
@@ -115,7 +128,7 @@ fn main() {
         Commands::Openai(args) => openai::run(into_openai_args(args)),
         Commands::Gemini(args) => gemini::run(into_gemini_args(args)),
         Commands::Anthropic(args) => anthropic::run(into_anthropic_args(args)),
-        Commands::Ollama(args) => openai::run(into_openai_args(args)),
+        Commands::Ollama(args) => ollama::run(into_ollama_args(args)),
         Commands::Openrouter(args) => openai::run(into_openai_args(args)),
     };
 
