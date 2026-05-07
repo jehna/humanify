@@ -72,7 +72,7 @@ impl Renamer for LlmRenamer {
                 }
             }
             Err(e) => {
-                eprintln!("humanify: LLM call failed for `{original}`: {e}");
+                eprintln!("humanify: LLM call failed for `{original}`: {e:?}");
                 original.to_string()
             }
         }

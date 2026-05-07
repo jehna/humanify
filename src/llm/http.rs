@@ -10,7 +10,7 @@ pub struct HttpClient {
 impl HttpClient {
     pub fn new() -> Self {
         let inner = reqwest::Client::builder()
-            .timeout(Duration::from_secs(60))
+            .timeout(Duration::from_secs(600))
             .build()
             .expect("reqwest client init failed");
         Self { inner }
