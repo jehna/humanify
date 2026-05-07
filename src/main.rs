@@ -1,9 +1,7 @@
-mod pipe;
-
 use clap::{error::ErrorKind, Parser, Subcommand};
+use humanify::cli::openai;
 use std::path::PathBuf;
 
-const EXIT_LLM_RUNTIME: i32 = 1;
 const EXIT_CLI_USAGE: i32 = 64;
 
 #[derive(Parser)]
@@ -60,13 +58,17 @@ struct SubArgs {
     verbose: bool,
 }
 
-fn run_passthrough(args: &SubArgs) -> anyhow::Result<()> {
-    // TODO(task-10): wire LlmRenamer + Ladder
-    let contents =
-        pipe::read_input(&args.input).map_err(|e| anyhow::anyhow!("failed to read input: {e}"))?;
-    pipe::write_output(args.output.as_deref(), &contents)
-        .map_err(|e| anyhow::anyhow!("failed to write output: {e}"))?;
-    Ok(())
+fn into_openai_args(a: SubArgs) -> openai::Args {
+    openai::Args {
+        input: a.input,
+        output: a.output,
+        model: a.model,
+        api_key: a.api_key,
+        base_url: a.base_url,
+        context_size: a.context_size,
+        json_mode: a.json_mode,
+        verbose: a.verbose,
+    }
 }
 
 fn main() {
@@ -83,16 +85,15 @@ fn main() {
         },
     };
 
-    let result = match &cli.command {
-        Commands::Openai(args) => run_passthrough(args),
-        Commands::Gemini(args) => run_passthrough(args),
-        Commands::Anthropic(args) => run_passthrough(args),
-        Commands::Ollama(args) => run_passthrough(args),
-        Commands::Openrouter(args) => run_passthrough(args),
+    let exit_code = match cli.command {
+        Commands::Openai(args) => openai::run(into_openai_args(args)),
+        Commands::Gemini(args) => openai::run(into_openai_args(args)),
+        Commands::Anthropic(args) => openai::run(into_openai_args(args)),
+        Commands::Ollama(args) => openai::run(into_openai_args(args)),
+        Commands::Openrouter(args) => openai::run(into_openai_args(args)),
     };
 
-    if let Err(e) = result {
-        eprintln!("error: {e:#}");
-        std::process::exit(EXIT_LLM_RUNTIME);
+    if exit_code != 0 {
+        std::process::exit(exit_code);
     }
 }

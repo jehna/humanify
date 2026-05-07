@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use serde_json::Value;
 use std::time::Duration;
 
+#[derive(Clone)]
 pub struct HttpClient {
     inner: reqwest::Client,
 }
