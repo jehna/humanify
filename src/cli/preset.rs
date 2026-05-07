@@ -495,17 +495,24 @@ mod tests {
 
     // --- Anthropic default ladder shape ---
 
-    #[test]
-    fn anthropic_default_ladder_has_two_strategies() {
-        let cfg = PresetConfig {
-            base_url: "https://api.anthropic.com/v1".to_string(),
-            model: "claude-sonnet-4-6".to_string(),
+    fn anthropic_preset_cfg() -> PresetConfig {
+        PresetConfig {
+            base_url: crate::cli::anthropic::DEFAULTS.base_url.to_string(),
+            model: crate::cli::anthropic::DEFAULTS.model.to_string(),
             api_key: None,
             json_mode: JsonMode::Ladder,
             context_size: 500,
             verbose: false,
-        };
-        let ladder = build_default_ladder(HttpClient::new(), &cfg, ProviderKind::Anthropic);
+        }
+    }
+
+    #[test]
+    fn anthropic_default_ladder_has_two_strategies() {
+        let ladder = build_default_ladder(
+            HttpClient::new(),
+            &anthropic_preset_cfg(),
+            ProviderKind::Anthropic,
+        );
         assert_eq!(ladder.strategy_count(), 2);
     }
 }
