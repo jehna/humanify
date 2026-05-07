@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use crate::cli::preset::{run_preset, PresetArgs, PresetDefaults, ProviderKind};
 
 pub const DEFAULTS: PresetDefaults = PresetDefaults {
-    base_url: "https://api.openai.com/v1",
-    model: "gpt-4.1-mini",
-    api_key_env: "OPENAI_API_KEY",
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    model: "gemini-2.0-flash-lite",
+    api_key_env: "GEMINI_API_KEY",
     provider_kind: ProviderKind::OpenAICompat,
 };
 
@@ -36,7 +36,7 @@ impl From<Args> for PresetArgs {
     }
 }
 
-/// Run the openai subcommand. Returns a process exit code (0 / 1 / 2 / 64).
+/// Run the gemini subcommand. Returns a process exit code (0 / 1 / 2 / 64).
 pub fn run(args: Args) -> i32 {
     run_preset(args.into(), DEFAULTS)
 }

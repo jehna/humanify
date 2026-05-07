@@ -1,4 +1,13 @@
 use std::env;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use crate::llm::{
+    http::HttpClient, ForcedToolCall, JsonStrategy, Ladder, LlmRenamer, OpenAIJsonSchema,
+    PromptToJson, ToolCallAndPrompt,
+};
+use crate::pipe;
+use crate::rename::{rename_all_identifiers, RenameError};
 
 pub struct PresetConfig {
     pub base_url: String,
@@ -7,6 +16,185 @@ pub struct PresetConfig {
     pub json_mode: JsonMode,
     pub context_size: usize,
     pub verbose: bool,
+}
+
+#[derive(Clone, Copy)]
+pub enum ProviderKind {
+    OpenAICompat,
+    Anthropic,
+}
+
+#[derive(Clone, Copy)]
+pub struct PresetDefaults {
+    pub base_url: &'static str,
+    pub model: &'static str,
+    pub api_key_env: &'static str,
+    pub provider_kind: ProviderKind,
+}
+
+/// Generic args carrier for all presets.
+pub struct PresetArgs {
+    pub input: String,
+    pub output: Option<PathBuf>,
+    pub model: Option<String>,
+    pub api_key: Option<String>,
+    pub base_url: Option<String>,
+    pub context_size: usize,
+    pub json_mode: String,
+    pub verbose: bool,
+}
+
+/// Returns Err with a user-facing message if `mode` is not valid for `kind`.
+pub fn validate_json_mode_for_provider(mode: &JsonMode, kind: ProviderKind) -> Result<(), String> {
+    match kind {
+        ProviderKind::OpenAICompat => {
+            if *mode == JsonMode::AnthropicNative {
+                return Err(
+                    "--json-mode anthropic-native is only valid for the `anthropic` subcommand"
+                        .to_string(),
+                );
+            }
+        }
+        ProviderKind::Anthropic => {
+            // Cross-provider checks for Anthropic are added in task #14.
+        }
+    }
+    Ok(())
+}
+
+/// Drives the full pipeline for any preset. Returns process exit code (0 / 1 / 2 / 64).
+pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
+    let json_mode = match JsonMode::parse(&args.json_mode) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("humanify: {e}");
+            return 64;
+        }
+    };
+
+    if let Err(msg) = validate_json_mode_for_provider(&json_mode, defaults.provider_kind) {
+        eprintln!("humanify: {msg}");
+        return 64;
+    }
+
+    let cfg = PresetConfig {
+        base_url: args
+            .base_url
+            .unwrap_or_else(|| defaults.base_url.to_string()),
+        model: args.model.unwrap_or_else(|| defaults.model.to_string()),
+        api_key: args.api_key.or_else(|| env_api_key(defaults.api_key_env)),
+        json_mode,
+        context_size: args.context_size,
+        verbose: args.verbose,
+    };
+    let output = args.output;
+
+    let source = match pipe::read_input(&args.input) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("humanify: failed to read input: {e}");
+            return 1;
+        }
+    };
+
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("humanify: failed to create tokio runtime: {e}");
+            return 1;
+        }
+    };
+
+    let client = HttpClient::new();
+    let ladder = Arc::new(build_ladder(client, &cfg));
+    let mut renamer = LlmRenamer::new(Arc::clone(&ladder), rt.handle().clone());
+    let context_size = cfg.context_size;
+
+    let result = rt.block_on(async move {
+        tokio::task::spawn_blocking(move || {
+            rename_all_identifiers(&source, &mut renamer, context_size)
+        })
+        .await
+    });
+
+    let renamed = match result {
+        Ok(Ok(s)) => s,
+        Ok(Err(RenameError::Parse(msg))) => {
+            eprintln!("humanify: parse error: {msg}");
+            return 2;
+        }
+        Err(join_err) => {
+            eprintln!("humanify: internal error: {join_err}");
+            return 1;
+        }
+    };
+
+    if cfg.verbose {
+        let locked = ladder.locked_strategy_name().unwrap_or("none");
+        eprintln!("humanify: locked strategy: {locked}");
+    }
+
+    if let Err(e) = pipe::write_output(output.as_deref(), &renamed) {
+        eprintln!("humanify: failed to write output: {e}");
+        return 1;
+    }
+
+    0
+}
+
+fn build_ladder(client: HttpClient, cfg: &PresetConfig) -> Ladder {
+    match cfg.json_mode {
+        JsonMode::Ladder => build_default_ladder(client, cfg),
+        JsonMode::OpenAIJsonSchema => Ladder::pinned(Arc::new(OpenAIJsonSchema::new(
+            client,
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        ))),
+        JsonMode::ForcedToolCall => Ladder::pinned(Arc::new(ForcedToolCall::new(
+            client,
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        ))),
+        JsonMode::ToolCallAndPrompt => Ladder::pinned(Arc::new(ToolCallAndPrompt::new(
+            client,
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        ))),
+        JsonMode::Prompt => Ladder::pinned(Arc::new(PromptToJson::new(
+            client,
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        ))),
+        JsonMode::AnthropicNative => unreachable!("rejected before build_ladder"),
+    }
+}
+
+fn build_default_ladder(client: HttpClient, cfg: &PresetConfig) -> Ladder {
+    let strategies: Vec<Arc<dyn JsonStrategy>> = vec![
+        Arc::new(OpenAIJsonSchema::new(
+            client.clone(),
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        )),
+        Arc::new(ForcedToolCall::new(
+            client.clone(),
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        )),
+        Arc::new(PromptToJson::new(
+            client,
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        )),
+    ];
+    Ladder::new(strategies)
 }
 
 /// Selects which JSON strategy (or ladder) to use for a run.
@@ -46,6 +234,8 @@ pub fn env_api_key(var_name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- JsonMode::parse ---
 
     #[test]
     fn ladder_parses() {
@@ -106,6 +296,8 @@ mod tests {
         assert!(JsonMode::parse("Ladder").is_err());
     }
 
+    // --- env_api_key ---
+
     #[test]
     fn env_api_key_returns_value_when_set() {
         std::env::set_var("_TEST_KEY_SET", "mykey");
@@ -124,5 +316,84 @@ mod tests {
         std::env::set_var("_TEST_KEY_EMPTY", "");
         assert_eq!(env_api_key("_TEST_KEY_EMPTY"), None);
         std::env::remove_var("_TEST_KEY_EMPTY");
+    }
+
+    // --- validate_json_mode_for_provider ---
+
+    #[test]
+    fn validate_anthropic_native_on_openai_compat_returns_err() {
+        assert!(validate_json_mode_for_provider(
+            &JsonMode::AnthropicNative,
+            ProviderKind::OpenAICompat
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn validate_anthropic_native_on_anthropic_returns_ok() {
+        assert!(validate_json_mode_for_provider(
+            &JsonMode::AnthropicNative,
+            ProviderKind::Anthropic
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_valid_mode_on_openai_compat_returns_ok() {
+        assert!(
+            validate_json_mode_for_provider(&JsonMode::Ladder, ProviderKind::OpenAICompat).is_ok()
+        );
+    }
+
+    // --- PresetDefaults sanity ---
+
+    #[test]
+    fn openai_defaults_constants() {
+        assert_eq!(
+            crate::cli::openai::DEFAULTS.base_url,
+            "https://api.openai.com/v1"
+        );
+        assert_eq!(crate::cli::openai::DEFAULTS.model, "gpt-4.1-mini");
+        assert_eq!(crate::cli::openai::DEFAULTS.api_key_env, "OPENAI_API_KEY");
+    }
+
+    #[test]
+    fn gemini_defaults_constants() {
+        assert_eq!(
+            crate::cli::gemini::DEFAULTS.base_url,
+            "https://generativelanguage.googleapis.com/v1beta/openai/"
+        );
+        assert_eq!(crate::cli::gemini::DEFAULTS.model, "gemini-2.0-flash-lite");
+        assert_eq!(crate::cli::gemini::DEFAULTS.api_key_env, "GEMINI_API_KEY");
+    }
+
+    // --- run_preset early-exit paths (no I/O reached) ---
+
+    fn preset_args_no_io(json_mode: &str) -> PresetArgs {
+        PresetArgs {
+            input: "irrelevant".to_string(),
+            output: None,
+            model: None,
+            api_key: None,
+            base_url: None,
+            context_size: 500,
+            json_mode: json_mode.to_string(),
+            verbose: false,
+        }
+    }
+
+    #[test]
+    fn anthropic_native_on_openai_compat_returns_64() {
+        let code = run_preset(
+            preset_args_no_io("anthropic-native"),
+            crate::cli::openai::DEFAULTS,
+        );
+        assert_eq!(code, 64);
+    }
+
+    #[test]
+    fn unknown_json_mode_returns_64() {
+        let code = run_preset(preset_args_no_io("garbage"), crate::cli::openai::DEFAULTS);
+        assert_eq!(code, 64);
     }
 }
