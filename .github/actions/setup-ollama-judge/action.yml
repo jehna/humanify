@@ -1,0 +1,26 @@
+name: Setup Ollama judge
+description: Install Ollama, restore cached model, pull qwen3.5:4b, and start the server.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Ollama model cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ollama/models
+        key: ollama-qwen35-4b-v1
+
+    - name: Install Ollama
+      shell: bash
+      timeout-minutes: 5
+      run: curl -fsSL https://ollama.com/install.sh | sh
+
+    - name: Start Ollama server
+      shell: bash
+      run: |
+        ollama serve &
+        sleep 3
+
+    - name: Pull qwen3.5:4b
+      shell: bash
+      run: ollama pull qwen3.5:4b
