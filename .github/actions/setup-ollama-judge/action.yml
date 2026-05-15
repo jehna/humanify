@@ -23,3 +23,13 @@ runs:
     - name: Pull qwen3.5:4b
       shell: bash
       run: ollama pull qwen3.5:4b
+
+    - name: Warm up qwen3.5:4b
+      shell: bash
+      run: |
+        # First inference loads the model into memory; do it now so the test's
+        # own HTTP timeout doesn't fire while Ollama is still cold-starting.
+        curl -fsS --max-time 300 http://localhost:11434/v1/chat/completions \
+          -H 'Content-Type: application/json' \
+          -d '{"model":"qwen3.5:4b","messages":[{"role":"user","content":"ok"}],"max_tokens":1}' \
+          > /dev/null

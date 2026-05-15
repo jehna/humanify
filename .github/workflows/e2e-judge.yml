@@ -25,4 +25,4 @@ jobs:
         run: cargo build --tests
 
       - name: e2e
-        run: cargo test --test e2e_judge -- --ignored --nocapture
+        run: cargo test --test e2e_judge -- --ignored --nocapture --test-threads=1
