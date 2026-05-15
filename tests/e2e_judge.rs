@@ -20,7 +20,8 @@ async fn assert_verdict(code: &str, expected: &str) {
 #[tokio::test]
 #[ignore]
 async fn judge_calls_minified_minified() {
-    let code = "var x=function(o,n){return o.filter(function(e){return e>n})};var y=x([1,2,3,4],2);";
+    let code =
+        "var x=function(o,n){return o.filter(function(e){return e>n})};var y=x([1,2,3,4],2);";
     assert_verdict(code, "MINIFIED").await;
 }
 
