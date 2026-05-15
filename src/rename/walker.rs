@@ -174,13 +174,8 @@ fn find_binding_ancestor_span(
     let scope_block = nodes.get_node(scope_block_node_id);
     let span = scope_block.kind().span();
 
-    // If the span is empty or zero (shouldn't happen), fall back to full source.
-    if span.start == 0 && span.end == 0 {
-        return Span::new(0, source.len() as u32);
-    }
-
-    // If this is the Program node (span starts at 0 and covers everything), return full source.
-    // Program.span may not cover trailing whitespace exactly; use source.len() as end.
+    // Program node (or empty span) starts at 0; Program.span may not cover trailing
+    // whitespace exactly, so fall back to the full source range.
     if span.start == 0 {
         return Span::new(0, source.len() as u32);
     }

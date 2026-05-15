@@ -4,7 +4,7 @@ use crate::cli::preset::{run_preset, PresetArgs, PresetDefaults, ProviderKind};
 
 pub const DEFAULTS: PresetDefaults = PresetDefaults {
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    model: "gemini-2.0-flash-lite",
+    model: "gemini-3.1-flash-lite",
     api_key_env: "GEMINI_API_KEY",
     provider_kind: ProviderKind::OpenAICompat,
 };

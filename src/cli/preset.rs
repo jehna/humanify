@@ -436,7 +436,7 @@ mod tests {
             crate::cli::openai::DEFAULTS.base_url,
             "https://api.openai.com/v1"
         );
-        assert_eq!(crate::cli::openai::DEFAULTS.model, "gpt-4.1-mini");
+        assert_eq!(crate::cli::openai::DEFAULTS.model, "gpt-5.4-mini");
         assert_eq!(crate::cli::openai::DEFAULTS.api_key_env, "OPENAI_API_KEY");
     }
 
@@ -446,7 +446,7 @@ mod tests {
             crate::cli::gemini::DEFAULTS.base_url,
             "https://generativelanguage.googleapis.com/v1beta/openai/"
         );
-        assert_eq!(crate::cli::gemini::DEFAULTS.model, "gemini-2.0-flash-lite");
+        assert_eq!(crate::cli::gemini::DEFAULTS.model, "gemini-3.1-flash-lite");
         assert_eq!(crate::cli::gemini::DEFAULTS.api_key_env, "GEMINI_API_KEY");
     }
 
