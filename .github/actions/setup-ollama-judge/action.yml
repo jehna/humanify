@@ -12,7 +12,6 @@ runs:
 
     - name: Install Ollama
       shell: bash
-      timeout-minutes: 5
       run: curl -fsSL https://ollama.com/install.sh | sh
 
     - name: Start Ollama server
