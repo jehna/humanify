@@ -6,7 +6,7 @@ use common::{given, humanify};
 #[ignore]
 async fn unminifies_example_file_with_gemini() {
     given("fixtures/example.min.js")
-        .judge_says_unreadable()
+        .judge_says_minified()
         .await
         .when(humanify().gemini().model("gemini-3.1-flash-lite"))
         .await

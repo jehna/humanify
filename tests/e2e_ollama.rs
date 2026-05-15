@@ -6,7 +6,7 @@ use common::{given, humanify};
 #[ignore]
 async fn unminifies_example_file_with_ollama() {
     given("fixtures/example.min.js")
-        .judge_says_unreadable()
+        .judge_says_minified()
         .await
         .when(humanify().ollama().model("qwen3.5:4b"))
         .await

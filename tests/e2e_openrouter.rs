@@ -6,7 +6,7 @@ use common::{given, humanify};
 #[ignore]
 async fn unminifies_example_file_with_openrouter() {
     given("fixtures/example.min.js")
-        .judge_says_unreadable()
+        .judge_says_minified()
         .await
         .when(humanify().openrouter().model("qwen/qwen3-coder:free"))
         .await

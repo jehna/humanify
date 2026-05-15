@@ -3,7 +3,7 @@
 //!
 //! Backbone:
 //!   given("fixtures/...")
-//!       .judge_says_unreadable().await
+//!       .judge_says_minified().await
 //!       .when(humanify().ollama().model("qwen3.5:4b"))
 //!       .await
 //!       .then_judge_says_one_of(&["EXCELLENT", "GOOD"])
@@ -15,7 +15,42 @@
 use humanify::{HttpClient, JsonStrategy, OpenAIJsonSchema};
 use serde_json::json;
 
-const JUDGE_SYSTEM: &str = "You are a code-readability judge. You receive JavaScript source code and respond with one of three verdicts: EXCELLENT (clear, descriptive identifier names; reads like normal code), GOOD (mostly-clear names but some are still vague), UNREADABLE (single-letter or random-looking names; minified or obfuscated). Respond with JSON only.";
+const JUDGE_SYSTEM: &str = "You are a code-readability judge. You receive JavaScript source code and respond with exactly one verdict. Respond with JSON only.
+
+Verdicts:
+- EXCELLENT: every identifier reads like normal, descriptive code.
+- GOOD: most identifiers are descriptive; a few are still vague but plausible.
+- GIBBERISH: most identifiers are sensible, but at least one is clearly wrong or nonsensical for what it represents (e.g. a function that adds numbers named `parseHTMLTree`, a counter named `purpleElephant`). Use this when the code looks renamed but contains an obvious hallucination.
+- MINIFIED: identifiers are single letters, random-looking, or otherwise minified/obfuscated.
+
+Examples:
+
+Code:
+```javascript
+function addNumbers(a, b) { return a + b; }
+const total = addNumbers(3, 4);
+```
+Verdict: EXCELLENT
+
+Code:
+```javascript
+function process(data, opts) { return data.map(x => x * opts.factor); }
+const result = process([1,2,3], { factor: 2 });
+```
+Verdict: GOOD
+
+Code:
+```javascript
+function parseHTMLTree(a, b) { return a + b; }
+const purpleElephant = parseHTMLTree(3, 4);
+```
+Verdict: GIBBERISH
+
+Code:
+```javascript
+function a(b,c){return b+c}var d=a(3,4);
+```
+Verdict: MINIFIED";
 
 fn judge_user(code: &str) -> String {
     format!("Source:\n```javascript\n{code}\n```\n\nVerdict:")
@@ -29,7 +64,7 @@ fn judge_schema() -> serde_json::Value {
         "properties": {
             "verdict": {
                 "type": "string",
-                "enum": ["EXCELLENT", "GOOD", "UNREADABLE"]
+                "enum": ["EXCELLENT", "GOOD", "GIBBERISH", "MINIFIED"]
             }
         }
     })
@@ -78,15 +113,15 @@ pub struct Scenario {
 }
 
 impl Scenario {
-    pub async fn judge_says_unreadable(self) -> Self {
+    pub async fn judge_says_minified(self) -> Self {
         let source = std::fs::read_to_string(&self.input_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {e}", self.input_path));
         let verdict = judge(&source)
             .await
             .unwrap_or_else(|e| panic!("judge failed for pre-assertion: {e}"));
         assert_eq!(
-            verdict, "UNREADABLE",
-            "pre-assertion failed: expected fixture to be UNREADABLE but got {verdict}"
+            verdict, "MINIFIED",
+            "pre-assertion failed: expected fixture to be MINIFIED but got {verdict}"
         );
         self
     }
