@@ -235,7 +235,7 @@ export OPENROUTER_API_KEY=your-token
 humanify openrouter obfuscated.js -o readable.js
 ```
 
-Default model: `x-ai/grok-code-fast-1`. For free-tier usage:
+Default model: `openai/gpt-oss-120b`. For free-tier usage:
 
 ```shell
 humanify openrouter obfuscated.js -m qwen/qwen3-coder:free
