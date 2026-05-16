@@ -1,5 +1,5 @@
 name: Setup Ollama judge
-description: Install Ollama, restore cached model, pull qwen3.5:4b, and start the server.
+description: Install Ollama, restore cached models, pull gemma3:4b (renamer) + qwen3.5:4b (judge), and start the server.
 
 runs:
   using: composite
@@ -8,7 +8,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.ollama/models
-        key: ollama-qwen35-4b-v1
+        key: ollama-gemma3-4b-qwen35-4b-v1
 
     - name: Install Ollama
       shell: bash
@@ -20,16 +20,22 @@ runs:
         ollama serve &
         sleep 3
 
-    - name: Pull qwen3.5:4b
+    - name: Pull gemma3:4b (renamer)
+      shell: bash
+      run: ollama pull gemma3:4b
+
+    - name: Pull qwen3.5:4b (judge)
       shell: bash
       run: ollama pull qwen3.5:4b
 
-    - name: Warm up qwen3.5:4b
+    - name: Warm up models
       shell: bash
       run: |
-        # First inference loads the model into memory; do it now so the test's
+        # First inference loads each model into memory; do it now so the test's
         # own HTTP timeout doesn't fire while Ollama is still cold-starting.
-        curl -fsS --max-time 300 http://localhost:11434/v1/chat/completions \
-          -H 'Content-Type: application/json' \
-          -d '{"model":"qwen3.5:4b","messages":[{"role":"user","content":"ok"}],"max_tokens":1}' \
-          > /dev/null
+        for model in gemma3:4b qwen3.5:4b; do
+          curl -fsS --max-time 300 http://localhost:11434/v1/chat/completions \
+            -H 'Content-Type: application/json' \
+            -d "{\"model\":\"$model\",\"messages\":[{\"role\":\"user\",\"content\":\"ok\"}],\"max_tokens\":1}" \
+            > /dev/null
+        done
