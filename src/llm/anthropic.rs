@@ -76,13 +76,11 @@ impl JsonStrategy for AnthropicNativeJsonSchema {
             "max_tokens": MAX_TOKENS,
             "system": system,
             "messages": [{ "role": "user", "content": user }],
+            // Anthropic's structured-outputs beta uses a flat shape: type and the
+            // schema live directly under output_format, no nested json_schema wrapper.
             "output_format": {
                 "type": "json_schema",
-                "json_schema": {
-                    "name": "humanify_response",
-                    "schema": schema,
-                    "strict": true
-                }
+                "schema": schema
             }
         });
 
