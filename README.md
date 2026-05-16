@@ -1,25 +1,26 @@
 # humanify
-> Deobfuscate JavaScript code using LLMs ("AI")
+
+> Un-minify JavaScript code using LLMs ("AI")
 
 This tool uses large language models (like ChatGPT, Claude, Gemini, and
-locally-hosted Ollama models) to deobfuscate, unminify, and rename minified or
-obfuscated JavaScript code. The LLM only suggests new identifier names; the
-heavy lifting is done by [oxc](https://github.com/oxc-project/oxc) at the AST
-level so the rewritten code remains structurally identical to the input.
+locally-hosted Ollama models) to unminify and rename minified JavaScript code.
+The LLM only suggests new identifier names; the heavy lifting is done by
+[oxc](https://github.com/oxc-project/oxc) at the AST level so the rewritten code
+remains structurally identical to the input.
 
 ## Version 3 is out! 🎉
 
 v3 highlights compared to v2:
 
-* Single static binary (Rust) — no Node, no npm, no Python.
-* Unix-style I/O: read from stdin or a file, write to stdout or `-o <file>`.
-* Two new providers: Anthropic and OpenRouter.
-* Strategy ladder for structured output: providers automatically fall back
-  through `response_format` → forced tool calls → prompt-only as their
-  individual support permits. No more silent JSON-parse failures.
-* Smaller blast radius: humanify does one job — rename identifiers in one
-  JavaScript file. Bundle splitting (webcrack) and post-formatting (Prettier)
-  are now your responsibility, in line with Unix pipe ergonomics.
+* **Single static binary:** (Rust) — grab a binary from Releases. No Node, no
+  npm, no Python.
+* **Unix-style I/O**: read from stdin or a file, write to stdout or `-o <file>`.
+  Combine easily with a deobfuscator like [webcrack][webcrack].
+* **New providers:** Ollama (local), Anthropic and OpenRouter.
+
+Check out the [v3 PR](https://github.com/jehna/humanify/pull/744) for more info.
+
+[webcrack]:https://github.com/j4k0xb/webcrack
 
 ### ➡️ Check out the [introduction blog post][blogpost] for in-depth explanation!
 
@@ -73,12 +74,12 @@ npx webcrack < bundle.min.js | humanify openai - -o bundle.js
 
 🚨 **NOTE:** 🚨
 
-humanify makes one LLM call per identifier in your code. For ChatGPT-class
-APIs the cost roughly scales with the number of identifiers and the surrounding
+humanify makes one LLM call per identifier in your code. For ChatGPT-class APIs
+the cost roughly scales with the number of identifiers and the surrounding
 context window (default 500 chars per call). A medium minified file (~500
-identifiers) typically costs in the range of $0.10–$1.00 with OpenAI's
-small models, free with the Gemini free tier, and free with Ollama or
-OpenRouter free models.
+identifiers) typically costs in the range of $0.10–$1.00 with OpenAI's small
+models, free with the Gemini free tier, and free with Ollama or OpenRouter free
+models.
 
 For a rough character-count estimate of OpenAI mode:
 
@@ -86,16 +87,16 @@ For a rough character-count estimate of OpenAI mode:
 echo "$((2 * $(wc -c < yourscript.min.js)))"
 ```
 
-Using `humanify ollama` is free but slower; quality depends on your local
-model. Free OpenRouter models (e.g. `qwen/qwen3-coder:free`) sit somewhere
-in between.
+Using `humanify ollama` is free but slower; quality depends on your local model.
+Free OpenRouter models (e.g. `qwen/qwen3-coder:free`) can help with your budget,
+but expect them to be heaviy rate limited.
 
 ## Getting started
 
 ### Installation
 
-The preferred way to install humanify is to download a pre-built binary
-from the [latest release](https://github.com/jehna/humanify/releases/latest).
+The preferred way to install humanify is to download a pre-built binary from the
+[latest release](https://github.com/jehna/humanify/releases/latest).
 
 ```shell
 # macOS (Apple Silicon)
@@ -143,7 +144,7 @@ humanify <openai|gemini|anthropic|ollama|openrouter> [FLAGS] <INPUT>
 Run `humanify --help` for the full reference.
 
 Note: humanify does one job — rename identifiers in one JavaScript file in,
-one out. To unbundle webpack output first, pipe through
+one out. To unbundle webpack output first, pipe through e.g.
 [webcrack](https://github.com/j4k0xb/webcrack):
 
 ```shell
@@ -197,9 +198,10 @@ tool-calls if your account doesn't have the structured-outputs beta enabled.
 
 ### Local mode (Ollama)
 
-Local mode runs against [Ollama](https://ollama.com/), which manages local
-LLM weights and exposes an OpenAI-compatible API on `localhost:11434`. There's
-no `humanify download` anymore — Ollama owns the model lifecycle.
+Local mode runs against [Ollama](https://ollama.com/), which manages local LLM
+weights and exposes an OpenAI-compatible API on `localhost:11434`. (pre-v3
+migration note: There's no `humanify download` anymore — use a local inference
+provider like Ollama to run your own models)
 
 Prerequisites:
 1. Install Ollama: <https://ollama.com/download>
@@ -243,19 +245,14 @@ humanify openrouter obfuscated.js -m qwen/qwen3-coder:free
 
 ## Features
 
-* Identifier renaming via LLMs across five providers (OpenAI, Gemini,
-  Anthropic, Ollama, OpenRouter).
-* Strategy ladder for structured output: each provider tries
-  `response_format` → forced tool-calls → plain-prompt JSON in order, locking
-  onto whichever the provider/model supports. NotSupported failures
-  permanently disable a strategy for the session; transient failures
-  propagate cleanly.
-* AST-level renaming via [oxc](https://github.com/oxc-project/oxc). Renames
-  preserve all references and respect lexical scoping.
+* Uses LLMs to get smart suggestions to rename variable and function names, and
+  make the rename using deterministic AST-level shenanigans via [oxc][oxc]
+* Renames preserve all references and respect lexical scoping
 * Reserved-word and collision-aware safe naming. The LLM's suggestion is
   normalised to a valid JS identifier and `_`-prefixed if it collides with
-  an existing binding.
-* Single static binary on macOS / Linux / Windows. No Node, no npm.
+  an existing binding
+
+[oxc]:https://github.com/oxc-project/oxc
 
 ## Contributing
 
@@ -277,4 +274,4 @@ e2e suites are label-gated (`test-openai`, `test-anthropic`,
 
 ## Licensing
 
-MIT. See [LICENSE](./LICENSE) for full text.
+The code in this project is licensed under MIT license.
