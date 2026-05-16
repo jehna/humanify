@@ -19,8 +19,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: ./.github/actions/setup-ollama-judge
-
       - name: e2e
         run: cargo test --test e2e_anthropic -- --ignored --nocapture
         env:

@@ -3,17 +3,22 @@
 //!
 //! Backbone:
 //!   given("fixtures/...")
+//!       .judged_by(JudgeConfig::ollama())
 //!       .judge_says_minified().await
 //!       .when(humanify().ollama().model("qwen3.5:4b"))
 //!       .await
 //!       .then_judge_says_one_of(&["EXCELLENT", "GOOD"])
 //!       .await;
 //!
-//! The judge is a local Ollama instance with qwen3.5:4b. Set
-//! HUMANIFY_E2E_JUDGE_URL to override (default: http://localhost:11434/v1).
+//! Each test uses the same provider for the judge as it does for the renamer:
+//! hosted-API tests avoid spinning up local Ollama entirely, and only
+//! e2e_ollama / e2e_judge depend on it.
 
-use humanify::{HttpClient, JsonStrategy, OpenAIJsonSchema};
-use serde_json::json;
+use humanify::{
+    AnthropicNativeJsonSchema, HttpClient, JsonStrategy, OpenAIJsonSchema, StrategyError,
+};
+use serde_json::{json, Value};
+use std::time::Duration;
 
 const JUDGE_SYSTEM: &str = "You are a code-readability judge. You receive JavaScript source code and respond with exactly one verdict. Respond with JSON only.
 
@@ -56,7 +61,7 @@ fn judge_user(code: &str) -> String {
     format!("Source:\n```javascript\n{code}\n```\n\nVerdict:")
 }
 
-fn judge_schema() -> serde_json::Value {
+fn judge_schema() -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
@@ -70,25 +75,100 @@ fn judge_schema() -> serde_json::Value {
     })
 }
 
-fn judge_url() -> String {
+fn ollama_url() -> String {
     std::env::var("HUMANIFY_E2E_JUDGE_URL")
         .unwrap_or_else(|_| "http://localhost:11434/v1".to_string())
 }
 
-pub async fn judge(code: &str) -> anyhow::Result<String> {
-    // The judge talks to a local Ollama running qwen3.5:4b. On a CPU-only CI
-    // runner one structured-output completion can take 10–15 min, so match the
-    // Ollama subcommand's 1800s per-request budget instead of the global default.
-    let strategy = OpenAIJsonSchema::new(
-        HttpClient::with_timeout(std::time::Duration::from_secs(1800)),
-        judge_url(),
-        None,
-        "qwen3.5:4b".to_string(),
-    );
-    let result = strategy
+#[derive(Clone)]
+pub enum JudgeKind {
+    OpenAICompat,
+    Anthropic,
+}
+
+#[derive(Clone)]
+pub struct JudgeConfig {
+    pub kind: JudgeKind,
+    pub base_url: String,
+    pub api_key: Option<String>,
+    pub model: String,
+    pub timeout: Duration,
+}
+
+impl JudgeConfig {
+    pub fn ollama() -> Self {
+        Self {
+            kind: JudgeKind::OpenAICompat,
+            base_url: ollama_url(),
+            api_key: None,
+            model: "qwen3.5:4b".to_string(),
+            // CPU-only CI runners need a generous budget for one structured
+            // completion against qwen3.5:4b.
+            timeout: Duration::from_secs(1800),
+        }
+    }
+
+    pub fn openai(model: &str) -> Self {
+        Self {
+            kind: JudgeKind::OpenAICompat,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: std::env::var("OPENAI_API_KEY").ok(),
+            model: model.to_string(),
+            timeout: Duration::from_secs(60),
+        }
+    }
+
+    pub fn gemini(model: &str) -> Self {
+        Self {
+            kind: JudgeKind::OpenAICompat,
+            base_url: "https://generativelanguage.googleapis.com/v1beta/openai/".to_string(),
+            api_key: std::env::var("GEMINI_API_KEY").ok(),
+            model: model.to_string(),
+            timeout: Duration::from_secs(60),
+        }
+    }
+
+    pub fn anthropic(model: &str) -> Self {
+        Self {
+            kind: JudgeKind::Anthropic,
+            base_url: "https://api.anthropic.com/v1".to_string(),
+            api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
+            model: model.to_string(),
+            timeout: Duration::from_secs(60),
+        }
+    }
+
+    pub fn openrouter(model: &str) -> Self {
+        Self {
+            kind: JudgeKind::OpenAICompat,
+            base_url: "https://openrouter.ai/api/v1".to_string(),
+            api_key: std::env::var("OPENROUTER_API_KEY").ok(),
+            model: model.to_string(),
+            timeout: Duration::from_secs(60),
+        }
+    }
+}
+
+pub async fn judge_with(cfg: &JudgeConfig, code: &str) -> anyhow::Result<String> {
+    let http = HttpClient::with_timeout(cfg.timeout);
+    let strategy: Box<dyn JsonStrategy> = match cfg.kind {
+        JudgeKind::OpenAICompat => Box::new(OpenAIJsonSchema::new(
+            http,
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        )),
+        JudgeKind::Anthropic => Box::new(AnthropicNativeJsonSchema::new(
+            http,
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        )),
+    };
+    let result: Result<Value, StrategyError> = strategy
         .call(JUDGE_SYSTEM, &judge_user(code), &judge_schema())
-        .await
-        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+        .await;
+    let result = result.map_err(|e| anyhow::anyhow!("{:?}", e))?;
     let verdict = result["verdict"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("judge returned no verdict field"))?
@@ -96,9 +176,16 @@ pub async fn judge(code: &str) -> anyhow::Result<String> {
     Ok(verdict)
 }
 
+/// Convenience wrapper used by the dedicated judge tests, which always exercise
+/// the Ollama judge.
+pub async fn judge(code: &str) -> anyhow::Result<String> {
+    judge_with(&JudgeConfig::ollama(), code).await
+}
+
 pub fn given(input_path: &str) -> Scenario {
     Scenario {
         input_path: input_path.to_string(),
+        judge: JudgeConfig::ollama(),
     }
 }
 
@@ -113,13 +200,19 @@ pub fn humanify() -> HumanifyCmdBuilder {
 
 pub struct Scenario {
     input_path: String,
+    judge: JudgeConfig,
 }
 
 impl Scenario {
+    pub fn judged_by(mut self, cfg: JudgeConfig) -> Self {
+        self.judge = cfg;
+        self
+    }
+
     pub async fn judge_says_minified(self) -> Self {
         let source = std::fs::read_to_string(&self.input_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {e}", self.input_path));
-        let verdict = judge(&source)
+        let verdict = judge_with(&self.judge, &source)
             .await
             .unwrap_or_else(|e| panic!("judge failed for pre-assertion: {e}"));
         assert_eq!(
@@ -153,6 +246,7 @@ impl Scenario {
             renamed: String::from_utf8(output.stdout).unwrap_or_default(),
             exit_code: output.status.code().unwrap_or(-1),
             stderr: String::from_utf8(output.stderr).unwrap_or_default(),
+            judge: self.judge,
         }
     }
 }
@@ -210,6 +304,7 @@ pub struct Outcome {
     renamed: String,
     exit_code: i32,
     stderr: String,
+    judge: JudgeConfig,
 }
 
 impl Outcome {
@@ -223,7 +318,7 @@ impl Outcome {
     }
 
     pub async fn then_judge_says_one_of(self, verdicts: &[&str]) {
-        let verdict = judge(&self.renamed)
+        let verdict = judge_with(&self.judge, &self.renamed)
             .await
             .unwrap_or_else(|e| panic!("judge failed: {e}\nstderr:\n{}", self.stderr));
         assert!(

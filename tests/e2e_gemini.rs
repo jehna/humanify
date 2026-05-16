@@ -1,11 +1,12 @@
 mod common;
 
-use common::{given, humanify};
+use common::{given, humanify, JudgeConfig};
 
 #[tokio::test]
 #[ignore]
 async fn unminifies_example_file_with_gemini() {
     given("fixtures/example.min.js")
+        .judged_by(JudgeConfig::gemini("gemini-3.1-flash-lite"))
         .judge_says_minified()
         .await
         .when(humanify().gemini().model("gemini-3.1-flash-lite"))
