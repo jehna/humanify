@@ -4,7 +4,7 @@ use crate::cli::preset::{run_preset, PresetArgs, PresetDefaults, ProviderKind};
 
 pub const DEFAULTS: PresetDefaults = PresetDefaults {
     base_url: "https://api.openai.com/v1",
-    model: "gpt-5.4-mini",
+    model: "gpt-5-mini",
     api_key_env: "OPENAI_API_KEY",
     provider_kind: ProviderKind::OpenAICompat,
     timeout_seconds: 60,

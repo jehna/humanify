@@ -166,7 +166,7 @@ export OPENAI_API_KEY=your-token
 humanify openai obfuscated.js -o readable.js
 ```
 
-Default model: `gpt-5.4-mini`. Override with `-m`.
+Default model: `gpt-5-mini`. Override with `-m`.
 
 ### Gemini mode
 

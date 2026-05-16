@@ -443,7 +443,7 @@ mod tests {
             crate::cli::openai::DEFAULTS.base_url,
             "https://api.openai.com/v1"
         );
-        assert_eq!(crate::cli::openai::DEFAULTS.model, "gpt-5.4-mini");
+        assert_eq!(crate::cli::openai::DEFAULTS.model, "gpt-5-mini");
         assert_eq!(crate::cli::openai::DEFAULTS.api_key_env, "OPENAI_API_KEY");
     }
 
