@@ -30,6 +30,10 @@ pub struct PresetDefaults {
     pub model: &'static str,
     pub api_key_env: &'static str,
     pub provider_kind: ProviderKind,
+    /// Per-request HTTP timeout. Set generously for local providers (Ollama on a
+    /// CPU runner can take ~10–15 min for a single constrained completion) and
+    /// tight for hosted APIs that answer in seconds.
+    pub timeout_seconds: u64,
 }
 
 /// Generic args carrier for all presets.
@@ -42,6 +46,7 @@ pub struct PresetArgs {
     pub context_size: usize,
     pub json_mode: String,
     pub verbose: bool,
+    pub timeout_seconds: Option<u64>,
 }
 
 /// Returns Err with a user-facing message if `mode` is not valid for `kind`.
@@ -104,7 +109,9 @@ pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
         }
     };
 
-    let client = HttpClient::new();
+    let timeout =
+        std::time::Duration::from_secs(args.timeout_seconds.unwrap_or(defaults.timeout_seconds));
+    let client = HttpClient::with_timeout(timeout);
     let ladder = Arc::new(build_ladder(client, &cfg, defaults.provider_kind));
     let mut renamer = LlmRenamer::new(Arc::clone(&ladder), rt.handle().clone());
     let context_size = cfg.context_size;
@@ -463,6 +470,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn hosted_providers_share_short_timeout() {
+        // Hosted APIs answer in seconds; a tight per-request budget surfaces
+        // upstream stalls quickly instead of letting the run hang.
+        assert_eq!(crate::cli::openai::DEFAULTS.timeout_seconds, 60);
+        assert_eq!(crate::cli::gemini::DEFAULTS.timeout_seconds, 60);
+        assert_eq!(crate::cli::anthropic::DEFAULTS.timeout_seconds, 60);
+        assert_eq!(crate::cli::openrouter::DEFAULTS.timeout_seconds, 60);
+    }
+
+    #[test]
+    fn ollama_gets_generous_timeout_for_local_inference() {
+        assert_eq!(crate::cli::ollama::DEFAULTS.timeout_seconds, 1800);
+    }
+
     // --- run_preset early-exit paths (no I/O reached) ---
 
     fn preset_args_no_io(json_mode: &str) -> PresetArgs {
@@ -475,6 +497,7 @@ mod tests {
             context_size: 500,
             json_mode: json_mode.to_string(),
             verbose: false,
+            timeout_seconds: None,
         }
     }
 

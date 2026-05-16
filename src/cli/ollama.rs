@@ -7,6 +7,10 @@ pub const DEFAULTS: PresetDefaults = PresetDefaults {
     model: "qwen3.5:4b",
     api_key_env: "",
     provider_kind: ProviderKind::OpenAICompat,
+    // Ollama runs locally on the user's CPU/GPU. On a CPU-only CI runner a single
+    // JSON-schema-constrained completion against qwen3.5:4b can take 10–15 min, so
+    // the per-request budget has to be much larger than for hosted APIs.
+    timeout_seconds: 1800,
 };
 
 pub struct Args {
@@ -18,6 +22,7 @@ pub struct Args {
     pub context_size: usize,
     pub json_mode: String,
     pub verbose: bool,
+    pub timeout_seconds: Option<u64>,
 }
 
 impl From<Args> for PresetArgs {
@@ -31,6 +36,7 @@ impl From<Args> for PresetArgs {
             context_size: a.context_size,
             json_mode: a.json_mode,
             verbose: a.verbose,
+            timeout_seconds: a.timeout_seconds,
         }
     }
 }

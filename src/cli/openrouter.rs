@@ -7,6 +7,7 @@ pub const DEFAULTS: PresetDefaults = PresetDefaults {
     model: "x-ai/grok-code-fast-1",
     api_key_env: "OPENROUTER_API_KEY",
     provider_kind: ProviderKind::OpenAICompat,
+    timeout_seconds: 60,
 };
 
 pub struct Args {
@@ -18,6 +19,7 @@ pub struct Args {
     pub context_size: usize,
     pub json_mode: String,
     pub verbose: bool,
+    pub timeout_seconds: Option<u64>,
 }
 
 impl From<Args> for PresetArgs {
@@ -31,6 +33,7 @@ impl From<Args> for PresetArgs {
             context_size: a.context_size,
             json_mode: a.json_mode,
             verbose: a.verbose,
+            timeout_seconds: a.timeout_seconds,
         }
     }
 }

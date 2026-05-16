@@ -7,6 +7,7 @@ pub const DEFAULTS: PresetDefaults = PresetDefaults {
     model: "gpt-5.4-mini",
     api_key_env: "OPENAI_API_KEY",
     provider_kind: ProviderKind::OpenAICompat,
+    timeout_seconds: 60,
 };
 
 /// Plain args carrier — not a clap struct so it can be constructed without clap.
@@ -19,6 +20,7 @@ pub struct Args {
     pub context_size: usize,
     pub json_mode: String,
     pub verbose: bool,
+    pub timeout_seconds: Option<u64>,
 }
 
 impl From<Args> for PresetArgs {
@@ -32,6 +34,7 @@ impl From<Args> for PresetArgs {
             context_size: a.context_size,
             json_mode: a.json_mode,
             verbose: a.verbose,
+            timeout_seconds: a.timeout_seconds,
         }
     }
 }

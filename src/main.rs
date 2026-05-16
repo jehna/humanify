@@ -53,6 +53,11 @@ struct SubArgs {
     #[arg(long, default_value = "ladder")]
     json_mode: String,
 
+    /// Per-request HTTP timeout in seconds. Overrides the preset default
+    /// (60s for hosted APIs, 1800s for Ollama).
+    #[arg(long)]
+    timeout_seconds: Option<u64>,
+
     /// Debug log to stderr
     #[arg(short, long)]
     verbose: bool,
@@ -68,6 +73,7 @@ fn into_openai_args(a: SubArgs) -> openai::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        timeout_seconds: a.timeout_seconds,
     }
 }
 
@@ -81,6 +87,7 @@ fn into_gemini_args(a: SubArgs) -> gemini::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        timeout_seconds: a.timeout_seconds,
     }
 }
 
@@ -94,6 +101,7 @@ fn into_anthropic_args(a: SubArgs) -> anthropic::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        timeout_seconds: a.timeout_seconds,
     }
 }
 
@@ -107,6 +115,7 @@ fn into_ollama_args(a: SubArgs) -> ollama::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        timeout_seconds: a.timeout_seconds,
     }
 }
 
@@ -120,6 +129,7 @@ fn into_openrouter_args(a: SubArgs) -> openrouter::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        timeout_seconds: a.timeout_seconds,
     }
 }
 
