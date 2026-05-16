@@ -15,7 +15,7 @@
 //! e2e_ollama / e2e_judge depend on it.
 
 use humanify::{
-    AnthropicNativeJsonSchema, HttpClient, JsonStrategy, OpenAIJsonSchema, StrategyError,
+    AnthropicToolCallAndPrompt, HttpClient, JsonStrategy, OpenAIJsonSchema, StrategyError,
 };
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -158,22 +158,45 @@ pub async fn judge_with(cfg: &JudgeConfig, code: &str) -> anyhow::Result<String>
             cfg.api_key.clone(),
             cfg.model.clone(),
         )),
-        JudgeKind::Anthropic => Box::new(AnthropicNativeJsonSchema::new(
+        // AnthropicNativeJsonSchema has a known request-shape bug; for the
+        // judge we use the tool-call strategy that the renamer's ladder also
+        // ends up falling back to.
+        JudgeKind::Anthropic => Box::new(AnthropicToolCallAndPrompt::new(
             http,
             cfg.base_url.clone(),
             cfg.api_key.clone(),
             cfg.model.clone(),
         )),
     };
-    let result: Result<Value, StrategyError> = strategy
-        .call(JUDGE_SYSTEM, &judge_user(code), &judge_schema())
-        .await;
-    let result = result.map_err(|e| anyhow::anyhow!("{:?}", e))?;
-    let verdict = result["verdict"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("judge returned no verdict field"))?
-        .to_string();
-    Ok(verdict)
+
+    // Free-tier providers (e.g. qwen/qwen3-coder:free on OpenRouter) sometimes
+    // return 429 while CI hammers them. Retry transient errors a few times with
+    // a short backoff so the judge call doesn't flake the whole run.
+    let mut last_err: Option<StrategyError> = None;
+    for attempt in 0..3 {
+        let result: Result<Value, StrategyError> = strategy
+            .call(JUDGE_SYSTEM, &judge_user(code), &judge_schema())
+            .await;
+        match result {
+            Ok(v) => {
+                let verdict = v["verdict"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("judge returned no verdict field"))?
+                    .to_string();
+                return Ok(verdict);
+            }
+            Err(StrategyError::Transient(e)) => {
+                last_err = Some(StrategyError::Transient(e));
+                let backoff = std::time::Duration::from_secs(2u64.pow(attempt));
+                tokio::time::sleep(backoff).await;
+            }
+            Err(other) => return Err(anyhow::anyhow!("{:?}", other)),
+        }
+    }
+    Err(anyhow::anyhow!(
+        "{:?}",
+        last_err.expect("loop must have set last_err on failure")
+    ))
 }
 
 /// Convenience wrapper used by the dedicated judge tests, which always exercise
