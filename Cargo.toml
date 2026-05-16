@@ -1,0 +1,26 @@
+[package]
+name = "humanify"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+oxc_allocator = "0.126.0"
+oxc_ast = "0.126.0"
+oxc_parser = "0.126.0"
+oxc_semantic = "0.126.0"
+oxc_codegen = "0.126.0"
+oxc_span = "0.126.0"
+thiserror = "2.0.18"
+oxc_str = "0.126.0"
+unicode-ident = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tokio = { version = "1.52.2", features = ["macros", "rt-multi-thread"] }
+async-trait = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
+assert_cmd = "2"

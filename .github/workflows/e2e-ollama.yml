@@ -1,0 +1,28 @@
+name: E2E Ollama
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: ./.github/actions/setup-ollama-judge
+
+      - name: build tests
+        run: cargo build --tests
+
+      - name: e2e
+        run: cargo test --test e2e_ollama -- --ignored --nocapture

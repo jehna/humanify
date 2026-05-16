@@ -1,0 +1,25 @@
+name: E2E Gemini
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: e2e
+        run: cargo test --test e2e_gemini -- --ignored --nocapture
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
