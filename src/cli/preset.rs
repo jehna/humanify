@@ -210,20 +210,18 @@ pub(crate) fn build_default_ladder(
                 cfg.model.clone(),
             )),
         ],
-        ProviderKind::Anthropic => vec![
-            Arc::new(AnthropicNativeJsonSchema::new(
-                client.clone(),
-                cfg.base_url.clone(),
-                cfg.api_key.clone(),
-                cfg.model.clone(),
-            )),
-            Arc::new(AnthropicToolCallAndPrompt::new(
-                client,
-                cfg.base_url.clone(),
-                cfg.api_key.clone(),
-                cfg.model.clone(),
-            )),
-        ],
+        // AnthropicNativeJsonSchema uses a beta API whose response shape we
+        // haven't validated against a live call — its parser frequently rejects
+        // real responses as "no JSON block in content", and the ladder cannot
+        // fall back from a Transient error. Default to the tool-call strategy,
+        // which is well-tested. AnthropicNativeJsonSchema is still reachable
+        // via `--json-mode anthropic-native` for anyone wanting to opt in.
+        ProviderKind::Anthropic => vec![Arc::new(AnthropicToolCallAndPrompt::new(
+            client,
+            cfg.base_url.clone(),
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+        ))],
     };
     Ladder::new(strategies)
 }
@@ -530,12 +528,15 @@ mod tests {
     }
 
     #[test]
-    fn anthropic_default_ladder_has_two_strategies() {
+    fn anthropic_default_ladder_uses_tool_call_only() {
+        // The native json-schema strategy lives behind `--json-mode anthropic-native`;
+        // the ladder ships tool-call exclusively because the native path's response
+        // shape isn't validated end-to-end yet.
         let ladder = build_default_ladder(
             HttpClient::new(),
             &anthropic_preset_cfg(),
             ProviderKind::Anthropic,
         );
-        assert_eq!(ladder.strategy_count(), 2);
+        assert_eq!(ladder.strategy_count(), 1);
     }
 }

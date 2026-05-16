@@ -170,10 +170,12 @@ pub async fn judge_with(cfg: &JudgeConfig, code: &str) -> anyhow::Result<String>
     };
 
     // Free-tier providers (e.g. qwen/qwen3-coder:free on OpenRouter) sometimes
-    // return 429 while CI hammers them. Retry transient errors a few times with
-    // a short backoff so the judge call doesn't flake the whole run.
+    // return 429 while CI hammers them. Retry transient errors with a generous
+    // backoff so the judge call doesn't flake the whole run. The free
+    // OpenRouter rate window can be tens of seconds, so we start at 5s.
+    const BACKOFFS_SECS: [u64; 4] = [5, 15, 30, 60];
     let mut last_err: Option<StrategyError> = None;
-    for attempt in 0..3 {
+    for backoff_secs in BACKOFFS_SECS.iter().copied() {
         let result: Result<Value, StrategyError> = strategy
             .call(JUDGE_SYSTEM, &judge_user(code), &judge_schema())
             .await;
@@ -187,8 +189,7 @@ pub async fn judge_with(cfg: &JudgeConfig, code: &str) -> anyhow::Result<String>
             }
             Err(StrategyError::Transient(e)) => {
                 last_err = Some(StrategyError::Transient(e));
-                let backoff = std::time::Duration::from_secs(2u64.pow(attempt));
-                tokio::time::sleep(backoff).await;
+                tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
             }
             Err(other) => return Err(anyhow::anyhow!("{:?}", other)),
         }
