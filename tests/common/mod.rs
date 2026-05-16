@@ -76,8 +76,11 @@ fn judge_url() -> String {
 }
 
 pub async fn judge(code: &str) -> anyhow::Result<String> {
+    // The judge talks to a local Ollama running qwen3.5:4b. On a CPU-only CI
+    // runner one structured-output completion can take 10–15 min, so match the
+    // Ollama subcommand's 1800s per-request budget instead of the global default.
     let strategy = OpenAIJsonSchema::new(
-        HttpClient::new(),
+        HttpClient::with_timeout(std::time::Duration::from_secs(1800)),
         judge_url(),
         None,
         "qwen3.5:4b".to_string(),
