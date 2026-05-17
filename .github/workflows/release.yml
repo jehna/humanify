@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 concurrency:
@@ -103,12 +103,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Determine tag
-        run: |
-          CARGO_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "TAG=v${CARGO_VERSION}-${SHORT_SHA}" >> $GITHUB_ENV
-
       - uses: actions/download-artifact@v4
         with:
           pattern: humanify-*
@@ -116,8 +110,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.TAG }}
-          name: ${{ env.TAG }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
             humanify-*.tar.gz
