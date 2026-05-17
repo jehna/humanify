@@ -272,6 +272,16 @@ and `ollama` (every PR, runs on the GitHub runner). Other providers'
 e2e suites are label-gated (`test-openai`, `test-anthropic`,
 `test-openrouter`) to avoid burning API credits on every PR.
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=jehna%2Fhumanify&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=jehna/humanify&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=jehna/humanify&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=jehna/humanify&type=date&legend=top-left" />
+ </picture>
+</a>
+
 ## Licensing
 
 The code in this project is licensed under MIT license.
