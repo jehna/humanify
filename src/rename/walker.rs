@@ -191,8 +191,8 @@ fn compute_context_window(
     ctx_span: oxc_span::Span,
     context_size: usize,
 ) -> String {
-    let ctx_start = ctx_span.start as usize;
-    let ctx_end = (ctx_span.end as usize).min(source.len());
+    let ctx_start = floor_char_boundary(source, ctx_span.start as usize);
+    let ctx_end = ceil_char_boundary(source, ctx_span.end as usize);
     let ctx_len = ctx_end.saturating_sub(ctx_start);
 
     if ctx_len <= context_size {
@@ -203,24 +203,44 @@ fn compute_context_window(
     let is_program = ctx_start == 0 && ctx_end == source.len();
 
     if is_program {
-        let sym_start = sym_span.start as usize;
+        let sym_start = (sym_span.start as usize).min(source.len());
         let sym_end = (sym_span.end as usize).min(source.len());
         let half = context_size / 2;
         if sym_end < half {
-            return source[..context_size.min(source.len())].to_string();
+            let end = ceil_char_boundary(source, context_size);
+            return source[..end].to_string();
         }
         if sym_start > source.len().saturating_sub(half) {
-            let start = source.len().saturating_sub(context_size);
+            let start = floor_char_boundary(source, source.len().saturating_sub(context_size));
             return source[start..].to_string();
         }
-        let start = sym_start.saturating_sub(half);
-        let end = (sym_end + half).min(source.len());
+        let start = floor_char_boundary(source, sym_start.saturating_sub(half));
+        let end = ceil_char_boundary(source, sym_end + half);
         source[start..end].to_string()
     } else {
         // Inner scope: return first context_size bytes of the scope slice.
-        let end = (ctx_start + context_size).min(ctx_end);
+        let end = ceil_char_boundary(source, ctx_start + context_size).min(ctx_end);
         source[ctx_start..end].to_string()
     }
+}
+
+/// Round `index` down to the nearest UTF-8 char boundary. Clamps to `source.len()`.
+fn floor_char_boundary(source: &str, index: usize) -> usize {
+    let mut idx = index.min(source.len());
+    while !source.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
+/// Round `index` up to the nearest UTF-8 char boundary. Clamps to `source.len()`.
+fn ceil_char_boundary(source: &str, index: usize) -> usize {
+    let len = source.len();
+    let mut idx = index.min(len);
+    while idx < len && !source.is_char_boundary(idx) {
+        idx += 1;
+    }
+    idx
 }
 
 #[cfg(test)]
@@ -586,6 +606,18 @@ mod tests {
             "expected x: {}",
             out.output()
         );
+    }
+
+    #[test]
+    fn truncation_window_falls_on_multibyte_char_boundary() {
+        // Cyrillic 'о' is 2 bytes (0xD0 0xBE). With a long stretch of these
+        // around the symbol, the truncation window edges land mid-character
+        // unless we snap them to UTF-8 char boundaries.
+        // Regression test for https://github.com/jehna/humanify/issues/747.
+        let pad = "о".repeat(500);
+        let input = format!("/* {pad} */ const x = 1; /* {pad} */");
+        let out = rename_all_identifiers(&input, &mut identity(), 50).unwrap();
+        assert!(out.contains("const x = 1"), "expected x unchanged: {out}");
     }
 
     #[test]
