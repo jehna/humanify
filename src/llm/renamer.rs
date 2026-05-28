@@ -6,7 +6,33 @@ use tokio::runtime::Handle;
 use crate::llm::ladder::Ladder;
 use crate::rename::Renamer;
 
-const SYSTEM_PROMPT: &str = "You are a senior software engineer reviewing minified or obfuscated JavaScript. Your job is to assign a single descriptive identifier name based on how the variable is used in the surrounding code. Return JSON only.";
+pub const SYSTEM_PROMPT: &str = "You are a senior software engineer reviewing minified or obfuscated JavaScript. Your job is to assign a single descriptive identifier name based on how the variable is used in the surrounding code. Return JSON only.";
+
+/// Builds the exact (system, user, schema) triple that `LlmRenamer::rename`
+/// would send for a given identifier. Exposed so the dry-run path tokenises
+/// the same bytes the real path would have sent.
+pub fn build_rename_prompt(
+    original: &str,
+    surrounding_code: &str,
+) -> (&'static str, String, serde_json::Value) {
+    let user = format!(
+        "Surrounding code:\n```javascript\n{surrounding_code}\n```\n\nThe identifier currently named `{original}` appears in this code. Suggest a single descriptive replacement name. Rules:\n- camelCase for variables and functions, PascalCase for classes/constructors\n- ASCII letters, digits, underscores only; first character must be a letter or underscore\n- Avoid JavaScript reserved words\n- If the current name is already meaningful, return it unchanged"
+    );
+    let schema = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+            "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "description": "The replacement identifier name."
+            }
+        }
+    });
+    (SYSTEM_PROMPT, user, schema)
+}
 
 /// Bridges the synchronous `Renamer` trait to the async `Ladder` via
 /// `tokio::runtime::Handle::block_on`.
@@ -33,27 +59,11 @@ impl Renamer for LlmRenamer {
             return String::new();
         }
 
-        let user = format!(
-            "Surrounding code:\n```javascript\n{surrounding_code}\n```\n\nThe identifier currently named `{original}` appears in this code. Suggest a single descriptive replacement name. Rules:\n- camelCase for variables and functions, PascalCase for classes/constructors\n- ASCII letters, digits, underscores only; first character must be a letter or underscore\n- Avoid JavaScript reserved words\n- If the current name is already meaningful, return it unchanged"
-        );
-
-        let schema = json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["name"],
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "description": "The replacement identifier name."
-                }
-            }
-        });
+        let (system, user, schema) = build_rename_prompt(original, surrounding_code);
 
         let result = self
             .runtime
-            .block_on(self.ladder.call(SYSTEM_PROMPT, &user, &schema));
+            .block_on(self.ladder.call(system, &user, &schema));
 
         match result {
             Ok(value) => {
