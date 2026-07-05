@@ -127,7 +127,7 @@ cargo install --git https://github.com/jehna/humanify
 ### Usage
 
 ```shell
-humanify <openai|gemini|anthropic|ollama|openrouter> [FLAGS] <INPUT>
+humanify <openai|gemini|anthropic|ollama|openrouter|requesty> [FLAGS] <INPUT>
 ```
 
 * `<INPUT>` is a file path or `-` for stdin.
@@ -241,6 +241,24 @@ Default model: `openai/gpt-oss-120b`. For free-tier usage:
 
 ```shell
 humanify openrouter obfuscated.js -m qwen/qwen3-coder:free
+```
+
+### Requesty mode
+
+[Requesty](https://requesty.ai/) provides an OpenAI-compatible router across
+many backend models via a single API key.
+
+You'll need a Requesty API key. Sign up at https://requesty.ai/.
+
+```shell
+export REQUESTY_API_KEY=your-token
+humanify requesty obfuscated.js -o readable.js
+```
+
+Default model: `openai/gpt-4o-mini`. Override with `-m`:
+
+```shell
+humanify requesty obfuscated.js -m openai/gpt-4o-mini
 ```
 
 ## Features
