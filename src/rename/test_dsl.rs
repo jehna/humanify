@@ -32,6 +32,19 @@ impl Renamer for IdentityRenamer {
     }
 }
 
+/// Renames based on the original name via a lookup table; unmapped names are
+/// left unchanged. Order-independent, unlike `queue`, which makes it convenient
+/// for testing scope-aware collision behaviour regardless of traversal order.
+pub struct MapRenamer(std::collections::HashMap<String, String>);
+impl Renamer for MapRenamer {
+    fn rename(&mut self, original: &str, _: &str) -> String {
+        self.0
+            .get(original)
+            .cloned()
+            .unwrap_or_else(|| original.to_string())
+    }
+}
+
 pub struct RecordingRenamer {
     suffix: String,
     pub log: CallLog,
@@ -85,6 +98,15 @@ pub fn recording(sfx: &str) -> RecordingRenamer {
         suffix: sfx.to_string(),
         log: CallLog::default(),
     }
+}
+
+pub fn mapping(pairs: &[(&str, &str)]) -> MapRenamer {
+    MapRenamer(
+        pairs
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect(),
+    )
 }
 
 // --- ScenarioBuilder ---
