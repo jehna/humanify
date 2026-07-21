@@ -30,6 +30,7 @@ impl HttpClient {
         let mut request = self
             .inner
             .post(url)
+            .header("User-Agent", concat!("humanify/", env!("CARGO_PKG_VERSION")))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json");
 
