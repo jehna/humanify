@@ -286,10 +286,12 @@ cargo test
 ```
 
 CI runs `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` on
-every PR. Provider e2e suites run against `gemini` (every PR, free tier)
-and `ollama` (every PR, runs on the GitHub runner). Other providers'
-e2e suites are label-gated (`test-openai`, `test-anthropic`,
-`test-openrouter`, `test-requesty`) to avoid burning API credits on every PR.
+every PR. Local `ollama` and judge e2e suites also run on every PR.
+The `gemini` e2e suite runs by default only for branches in this repository.
+Other providers' e2e suites require both a branch in this repository and
+their corresponding label (`test-openai`, `test-anthropic`,
+`test-openrouter`, `test-requesty`) to avoid exposing secrets to forks or
+burning API credits on every PR.
 
 ## Star History
 

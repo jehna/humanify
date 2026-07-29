@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::cli::preset::{run_preset, PresetArgs, PresetDefaults, ProviderKind};
 
 pub const DEFAULTS: PresetDefaults = PresetDefaults {
+    name: "requesty",
     base_url: "https://router.requesty.ai/v1",
     model: "nvidia/nemotron-3-super-120b-a12b",
     api_key_env: "REQUESTY_API_KEY",
@@ -16,9 +17,10 @@ pub struct Args {
     pub model: Option<String>,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
-    pub context_size: usize,
-    pub json_mode: String,
+    pub context_size: Option<usize>,
+    pub json_mode: Option<String>,
     pub verbose: bool,
+    pub progress: bool,
     pub timeout_seconds: Option<u64>,
 }
 
@@ -33,6 +35,7 @@ impl From<Args> for PresetArgs {
             context_size: a.context_size,
             json_mode: a.json_mode,
             verbose: a.verbose,
+            progress: a.progress,
             timeout_seconds: a.timeout_seconds,
         }
     }
