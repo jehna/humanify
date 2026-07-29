@@ -20,6 +20,7 @@ pub struct Args {
     pub context_size: Option<usize>,
     pub json_mode: Option<String>,
     pub verbose: bool,
+    pub progress: bool,
     pub timeout_seconds: Option<u64>,
 }
 
@@ -34,6 +35,7 @@ impl From<Args> for PresetArgs {
             context_size: a.context_size,
             json_mode: a.json_mode,
             verbose: a.verbose,
+            progress: a.progress,
             timeout_seconds: a.timeout_seconds,
         }
     }

@@ -1,4 +1,5 @@
 use std::env;
+use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -50,6 +51,7 @@ pub struct PresetArgs {
     pub context_size: Option<usize>,
     pub json_mode: Option<String>,
     pub verbose: bool,
+    pub progress: bool,
     pub timeout_seconds: Option<u64>,
 }
 
@@ -149,7 +151,7 @@ pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
     let client = HttpClient::with_timeout(timeout);
     let ladder = Arc::new(build_ladder(client, &cfg, defaults.provider_kind));
     let mut renamer = LlmRenamer::new(Arc::clone(&ladder), rt.handle().clone());
-    let mut observer = VerboseObserver::new(cfg.verbose, Arc::clone(&ladder));
+    let mut observer = CliObserver::new(cfg.verbose, args.progress, Arc::clone(&ladder));
     let context_size = cfg.context_size;
 
     let result = rt.block_on(async move {
@@ -241,49 +243,143 @@ fn print_verbose_config(
     }
 }
 
-struct VerboseObserver {
-    enabled: bool,
+const PROGRESS_BAR_WIDTH: usize = 30;
+
+struct CliObserver {
+    verbose: bool,
+    progress: bool,
+    progress_is_terminal: bool,
+    completed: usize,
+    total: usize,
+    last_logged_percent: Option<usize>,
+    displayed_width: usize,
     ladder: Arc<Ladder>,
     reported_strategy: Option<&'static str>,
 }
 
-impl VerboseObserver {
-    fn new(enabled: bool, ladder: Arc<Ladder>) -> Self {
+impl CliObserver {
+    fn new(verbose: bool, progress: bool, ladder: Arc<Ladder>) -> Self {
         Self {
-            enabled,
+            verbose,
+            progress,
+            progress_is_terminal: io::stderr().is_terminal(),
+            completed: 0,
+            total: 0,
+            last_logged_percent: None,
+            displayed_width: 0,
             ladder,
             reported_strategy: None,
         }
     }
 
-    fn report_strategy_if_changed(&mut self) {
+    fn take_changed_strategy(&mut self) -> Option<&'static str> {
         let strategy = self.ladder.locked_strategy_name();
         if strategy.is_some() && strategy != self.reported_strategy {
-            eprintln!("* selected JSON strategy: {}", strategy.unwrap());
             self.reported_strategy = strategy;
+            strategy
+        } else {
+            None
+        }
+    }
+
+    fn clear_terminal_progress(&mut self) {
+        if !self.progress || !self.progress_is_terminal || self.displayed_width == 0 {
+            return;
+        }
+
+        eprint!(
+            "\r{blank:width$}\r",
+            blank = "",
+            width = self.displayed_width
+        );
+        let _ = io::stderr().flush();
+        self.displayed_width = 0;
+    }
+
+    fn draw_terminal_progress(&mut self) {
+        if !self.progress || !self.progress_is_terminal {
+            return;
+        }
+
+        let line = render_progress(self.completed, self.total);
+        eprint!("\r{line}");
+        let _ = io::stderr().flush();
+        self.displayed_width = line.len();
+        if self.completed == self.total {
+            eprintln!();
+            self.displayed_width = 0;
+        }
+    }
+
+    fn log_progress_snapshot(&mut self) {
+        if !self.progress || self.progress_is_terminal {
+            return;
+        }
+
+        let percent = self
+            .completed
+            .saturating_mul(100)
+            .checked_div(self.total)
+            .unwrap_or(100);
+        let should_log = self.last_logged_percent.is_none()
+            || self.completed == self.total
+            || percent >= self.last_logged_percent.unwrap_or(0) + 10;
+        if should_log {
+            eprintln!("{}", render_progress(self.completed, self.total));
+            self.last_logged_percent = Some(percent);
         }
     }
 }
 
-impl RenameObserver for VerboseObserver {
+impl RenameObserver for CliObserver {
     fn identifiers_found(&mut self, total: usize) {
-        if self.enabled {
+        self.total = total;
+        if self.verbose {
             eprintln!("* found {total} identifiers");
         }
+        self.draw_terminal_progress();
+        self.log_progress_snapshot();
     }
 
     fn rename_started(&mut self, current: usize, total: usize, original: &str) {
-        if self.enabled {
+        if self.verbose {
+            self.clear_terminal_progress();
             eprintln!("* [{current}/{total}] renaming `{original}`");
+            self.draw_terminal_progress();
         }
     }
 
     fn rename_finished(&mut self, current: usize, total: usize, original: &str, renamed: &str) {
-        if self.enabled {
-            self.report_strategy_if_changed();
+        if self.verbose {
+            self.clear_terminal_progress();
+            if let Some(strategy) = self.take_changed_strategy() {
+                eprintln!("* selected JSON strategy: {strategy}");
+            }
             eprintln!("* [{current}/{total}] `{original}` -> `{renamed}`");
         }
+        self.completed = current;
+        self.total = total;
+        self.draw_terminal_progress();
+        self.log_progress_snapshot();
     }
+}
+
+fn render_progress(completed: usize, total: usize) -> String {
+    let completed = completed.min(total);
+    let filled = completed
+        .saturating_mul(PROGRESS_BAR_WIDTH)
+        .checked_div(total)
+        .unwrap_or(PROGRESS_BAR_WIDTH);
+    let bar = if completed == total {
+        "=".repeat(PROGRESS_BAR_WIDTH)
+    } else {
+        format!(
+            "{}>{}",
+            "=".repeat(filled),
+            "-".repeat(PROGRESS_BAR_WIDTH - filled - 1)
+        )
+    };
+    format!("[{bar}] {completed}/{total} identifiers")
 }
 
 fn build_ladder(client: HttpClient, cfg: &PresetConfig, kind: ProviderKind) -> Ladder {
@@ -633,6 +729,7 @@ mod tests {
             context_size: None,
             json_mode: Some(json_mode.to_string()),
             verbose: false,
+            progress: false,
             timeout_seconds: None,
         }
     }
@@ -676,5 +773,29 @@ mod tests {
             ProviderKind::Anthropic,
         );
         assert_eq!(ladder.strategy_count(), 1);
+    }
+
+    #[test]
+    fn progress_bar_starts_empty() {
+        assert_eq!(
+            render_progress(0, 4),
+            "[>-----------------------------] 0/4 identifiers"
+        );
+    }
+
+    #[test]
+    fn progress_bar_shows_partial_completion() {
+        assert_eq!(
+            render_progress(2, 4),
+            "[===============>--------------] 2/4 identifiers"
+        );
+    }
+
+    #[test]
+    fn progress_bar_finishes_full() {
+        assert_eq!(
+            render_progress(4, 4),
+            "[==============================] 4/4 identifiers"
+        );
     }
 }

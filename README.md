@@ -140,6 +140,7 @@ humanify <openai|gemini|anthropic|ollama|openrouter> [FLAGS] <INPUT>
   `ladder` (default), `openai-json-schema`, `anthropic-native`,
   `forced-tool-call`, `tool-call-and-prompt`, `prompt`.
 * `-v` prints resolved configuration and identifier-level rename steps to stderr.
+* `--progress` shows an identifier progress bar on stderr.
 
 Run `humanify --help` for the full reference.
 

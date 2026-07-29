@@ -58,9 +58,13 @@ struct SubArgs {
     #[arg(long)]
     timeout_seconds: Option<u64>,
 
-    /// Debug log to stderr
+    /// Show resolved configuration and rename steps on stderr
     #[arg(short, long)]
     verbose: bool,
+
+    /// Show an identifier progress bar on stderr
+    #[arg(long)]
+    progress: bool,
 }
 
 fn into_openai_args(a: SubArgs) -> openai::Args {
@@ -73,6 +77,7 @@ fn into_openai_args(a: SubArgs) -> openai::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
@@ -87,6 +92,7 @@ fn into_gemini_args(a: SubArgs) -> gemini::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
@@ -101,6 +107,7 @@ fn into_anthropic_args(a: SubArgs) -> anthropic::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
@@ -115,6 +122,7 @@ fn into_ollama_args(a: SubArgs) -> ollama::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
@@ -129,6 +137,7 @@ fn into_openrouter_args(a: SubArgs) -> openrouter::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }

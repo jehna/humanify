@@ -76,3 +76,37 @@ fn verbose_reports_resolved_config_and_rename_steps_to_stderr() {
     assert!(stderr.contains("* [1/1] `x` -> `x`"), "stderr:\n{stderr}");
     assert!(!stderr.contains("must-not-be-printed"), "stderr:\n{stderr}");
 }
+
+#[test]
+fn progress_writes_plain_snapshots_to_redirected_stderr() {
+    let out = NamedTempFile::new().unwrap();
+    let out_path = out.path().to_owned();
+
+    let assert = Command::cargo_bin("humanify")
+        .unwrap()
+        .args([
+            "openai",
+            "-",
+            "-o",
+            out_path.to_str().unwrap(),
+            "--base-url",
+            "http://127.0.0.1:1",
+            "--progress",
+        ])
+        .write_stdin("const x = 1; const y = 2;")
+        .assert()
+        .success();
+
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("[>-----------------------------] 0/2 identifiers"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("[==============================] 2/2 identifiers"),
+        "stderr:\n{stderr}"
+    );
+    assert!(!stderr.contains('\r'), "stderr:\n{stderr}");
+    assert!(!stderr.contains("* provider:"), "stderr:\n{stderr}");
+    assert!(assert.get_output().stdout.is_empty());
+}
