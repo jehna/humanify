@@ -153,6 +153,7 @@ fn into_requesty_args(a: SubArgs) -> requesty::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
