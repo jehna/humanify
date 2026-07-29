@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use oxc_semantic::{ScopeId, Scoping, SymbolId};
+use oxc_semantic::{AstNodes, ScopeId, Scoping, SymbolId};
 use oxc_str::Ident;
 
 /// Split a trailing run of ASCII decimal digits off an identifier.
@@ -61,6 +61,9 @@ pub(crate) fn dedupe<F: Fn(&str) -> bool>(base: &str, is_taken: F) -> (String, b
 ///      `return a` to the inner `x`), so it must count as a collision. The
 ///      descendant index is seeded from every existing binding and kept live by
 ///      `commit`, so this holds no matter what order symbols are processed in.
+///   3. **An unresolved reference** — these are runtime globals or names supplied
+///      by the host application. Creating a binding with the same name could
+///      silently capture the existing reference.
 ///
 /// Two identifiers in *disjoint* scopes (e.g. sibling functions) may freely
 /// share a name — exactly as JavaScript allows — so no underscores accrue.
@@ -74,13 +77,17 @@ pub(crate) struct CollisionResolver {
     /// scopes that bind it. Enables an O(log n) "is this name bound in any
     /// descendant of scope X?" range query.
     name_scopes: HashMap<String, BTreeSet<u32>>,
+    /// For each unresolved name, the scopes containing its references. These
+    /// may be runtime globals or host-provided names that no static browser or
+    /// Node global list could know about.
+    unresolved_name_scopes: HashMap<String, BTreeSet<u32>>,
 }
 
 impl CollisionResolver {
     /// Build the scope tree Euler tour and seed the name index from every
     /// existing binding (including names that will never be renamed, so that
     /// descendant kept-names are still respected).
-    pub(crate) fn new(scoping: &Scoping) -> Self {
+    pub(crate) fn new(scoping: &Scoping, nodes: &AstNodes<'_>) -> Self {
         // Build children adjacency from parent links.
         let mut children: HashMap<ScopeId, Vec<ScopeId>> = HashMap::new();
         for scope_id in scoping.scope_descendants_from_root() {
@@ -124,11 +131,24 @@ impl CollisionResolver {
                 name_scopes.entry(name.to_string()).or_default().insert(idx);
             }
         }
+        let mut unresolved_name_scopes = HashMap::new();
+        for (name, references) in scoping.root_unresolved_references() {
+            let indices = references
+                .iter()
+                .filter_map(|reference_id| {
+                    let reference = scoping.get_reference(*reference_id);
+                    let scope_id = nodes.get_node(reference.node_id()).scope_id();
+                    enter.get(&scope_id).copied()
+                })
+                .collect();
+            unresolved_name_scopes.insert(name.to_string(), indices);
+        }
 
         CollisionResolver {
             enter,
             exit,
             name_scopes,
+            unresolved_name_scopes,
         }
     }
 
@@ -142,6 +162,17 @@ impl CollisionResolver {
         symbol: SymbolId,
         candidate: &str,
     ) -> bool {
+        // An unresolved reference is captured only when it occurs in the
+        // declaration scope or one of its descendants. References in sibling
+        // or ancestor scopes cannot see this new binding.
+        if let (Some(&lo), Some(&hi)) = (self.enter.get(&decl_scope), self.exit.get(&decl_scope)) {
+            if let Some(indices) = self.unresolved_name_scopes.get(candidate) {
+                if indices.range(lo..hi).next().is_some() {
+                    return true;
+                }
+            }
+        }
+
         // (1) Same scope or ancestor: find_binding walks up from decl_scope.
         // A hit on the symbol itself is not a real collision (candidate == its
         // own current name, i.e. a no-op rename).
