@@ -8,14 +8,24 @@ use oxc_span::{GetSpan, SourceType};
 use oxc_str::Ident;
 
 use super::collision::CollisionResolver;
-use super::{RenameError, Renamer};
+use super::{NoopRenameObserver, RenameError, RenameObserver, Renamer};
 
 pub fn rename_all_identifiers(
     source: &str,
     renamer: &mut dyn Renamer,
     context_size: usize,
 ) -> Result<String, RenameError> {
+    rename_all_identifiers_with_observer(source, renamer, context_size, &mut NoopRenameObserver)
+}
+
+pub fn rename_all_identifiers_with_observer(
+    source: &str,
+    renamer: &mut dyn Renamer,
+    context_size: usize,
+    observer: &mut dyn RenameObserver,
+) -> Result<String, RenameError> {
     if source.is_empty() {
+        observer.identifiers_found(0);
         return Ok(String::new());
     }
 
@@ -72,11 +82,14 @@ pub fn rename_all_identifiers(
 
     // Sort: largest scope first; ties broken by source position (ascending).
     entries.sort_by(|a, b| b.1.cmp(&a.1).then(a.2.cmp(&b.2)));
+    let total = entries.len();
+    observer.identifiers_found(total);
 
     let mut visited: HashSet<SymbolId> = HashSet::new();
     let mut collisions = CollisionResolver::new(semantic.scoping());
 
-    for (sym_id, _, _) in &entries {
+    for (index, (sym_id, _, _)) in entries.iter().enumerate() {
+        let current = index + 1;
         let sym_id = *sym_id;
         let original_name = {
             let scoping = semantic.scoping();
@@ -90,6 +103,7 @@ pub fn rename_all_identifiers(
             continue;
         }
         visited.insert(sym_id);
+        observer.rename_started(current, total, &original_name);
 
         // Compute surrounding code context.
         let surrounding = {
@@ -113,6 +127,7 @@ pub fn rename_all_identifiers(
 
         if new_name == original_name {
             // No rename; short-circuit — skip safe-name pipeline.
+            observer.rename_finished(current, total, &original_name, &original_name);
             continue;
         }
 
@@ -137,6 +152,7 @@ pub fn rename_all_identifiers(
         semantic
             .scoping_mut()
             .rename_symbol(sym_id, scope_id, new_ident);
+        observer.rename_finished(current, total, &original_name, &safe);
     }
 
     let scoping: Scoping = semantic.into_scoping();

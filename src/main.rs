@@ -45,13 +45,13 @@ struct SubArgs {
     #[arg(long)]
     base_url: Option<String>,
 
-    /// Surrounding code chars per identifier
-    #[arg(long, default_value_t = 500)]
-    context_size: usize,
+    /// Surrounding code chars per identifier (default: 500)
+    #[arg(long)]
+    context_size: Option<usize>,
 
-    /// JSON strategy mode
-    #[arg(long, default_value = "ladder")]
-    json_mode: String,
+    /// JSON strategy mode (default: ladder)
+    #[arg(long)]
+    json_mode: Option<String>,
 
     /// Per-request HTTP timeout in seconds. Overrides the preset default
     /// (60s for hosted APIs, 1800s for Ollama).

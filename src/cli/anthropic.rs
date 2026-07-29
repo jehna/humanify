@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::cli::preset::{run_preset, PresetArgs, PresetDefaults, ProviderKind};
 
 pub const DEFAULTS: PresetDefaults = PresetDefaults {
+    name: "anthropic",
     base_url: "https://api.anthropic.com/v1",
     model: "claude-sonnet-4-6",
     api_key_env: "ANTHROPIC_API_KEY",
@@ -17,8 +18,8 @@ pub struct Args {
     pub model: Option<String>,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
-    pub context_size: usize,
-    pub json_mode: String,
+    pub context_size: Option<usize>,
+    pub json_mode: Option<String>,
     pub verbose: bool,
     pub timeout_seconds: Option<u64>,
 }

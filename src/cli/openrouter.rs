@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::cli::preset::{run_preset, PresetArgs, PresetDefaults, ProviderKind};
 
 pub const DEFAULTS: PresetDefaults = PresetDefaults {
+    name: "openrouter",
     base_url: "https://openrouter.ai/api/v1",
     model: "openai/gpt-oss-120b",
     api_key_env: "OPENROUTER_API_KEY",
@@ -16,8 +17,8 @@ pub struct Args {
     pub model: Option<String>,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
-    pub context_size: usize,
-    pub json_mode: String,
+    pub context_size: Option<usize>,
+    pub json_mode: Option<String>,
     pub verbose: bool,
     pub timeout_seconds: Option<u64>,
 }

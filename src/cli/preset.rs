@@ -7,7 +7,10 @@ use crate::llm::{
     JsonStrategy, Ladder, LlmRenamer, OpenAIJsonSchema, PromptToJson, ToolCallAndPrompt,
 };
 use crate::pipe;
-use crate::rename::{rename_all_identifiers, RenameError};
+use crate::rename::{rename_all_identifiers_with_observer, RenameError, RenameObserver};
+
+const DEFAULT_CONTEXT_SIZE: usize = 500;
+const DEFAULT_JSON_MODE: &str = "ladder";
 
 pub struct PresetConfig {
     pub base_url: String,
@@ -26,6 +29,7 @@ pub enum ProviderKind {
 
 #[derive(Clone, Copy)]
 pub struct PresetDefaults {
+    pub name: &'static str,
     pub base_url: &'static str,
     pub model: &'static str,
     pub api_key_env: &'static str,
@@ -43,8 +47,8 @@ pub struct PresetArgs {
     pub model: Option<String>,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
-    pub context_size: usize,
-    pub json_mode: String,
+    pub context_size: Option<usize>,
+    pub json_mode: Option<String>,
     pub verbose: bool,
     pub timeout_seconds: Option<u64>,
 }
@@ -68,7 +72,15 @@ pub fn validate_json_mode_for_provider(mode: &JsonMode, kind: ProviderKind) -> R
 
 /// Drives the full pipeline for any preset. Returns process exit code (0 / 1 / 2 / 64).
 pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
-    let json_mode = match JsonMode::parse(&args.json_mode) {
+    let model_from_cli = args.model.is_some();
+    let api_key_from_cli = args.api_key.is_some();
+    let base_url_from_cli = args.base_url.is_some();
+    let context_size_from_cli = args.context_size.is_some();
+    let json_mode_from_cli = args.json_mode.is_some();
+    let timeout_from_cli = args.timeout_seconds.is_some();
+
+    let json_mode_name = args.json_mode.as_deref().unwrap_or(DEFAULT_JSON_MODE);
+    let json_mode = match JsonMode::parse(json_mode_name) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("humanify: {e}");
@@ -81,17 +93,41 @@ pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
         return 64;
     }
 
+    let env_key = if api_key_from_cli {
+        None
+    } else {
+        env_api_key(defaults.api_key_env)
+    };
     let cfg = PresetConfig {
         base_url: args
             .base_url
             .unwrap_or_else(|| defaults.base_url.to_string()),
         model: args.model.unwrap_or_else(|| defaults.model.to_string()),
-        api_key: args.api_key.or_else(|| env_api_key(defaults.api_key_env)),
+        api_key: args.api_key.or(env_key),
         json_mode,
-        context_size: args.context_size,
+        context_size: args.context_size.unwrap_or(DEFAULT_CONTEXT_SIZE),
         verbose: args.verbose,
     };
     let output = args.output;
+    let timeout_seconds = args.timeout_seconds.unwrap_or(defaults.timeout_seconds);
+
+    if cfg.verbose {
+        print_verbose_config(
+            &args.input,
+            output.as_deref(),
+            &cfg,
+            defaults,
+            ConfigSources {
+                model_from_cli,
+                api_key_from_cli,
+                base_url_from_cli,
+                context_size_from_cli,
+                json_mode_from_cli,
+                timeout_from_cli,
+            },
+            timeout_seconds,
+        );
+    }
 
     let source = match pipe::read_input(&args.input) {
         Ok(s) => s,
@@ -109,16 +145,16 @@ pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
         }
     };
 
-    let timeout =
-        std::time::Duration::from_secs(args.timeout_seconds.unwrap_or(defaults.timeout_seconds));
+    let timeout = std::time::Duration::from_secs(timeout_seconds);
     let client = HttpClient::with_timeout(timeout);
     let ladder = Arc::new(build_ladder(client, &cfg, defaults.provider_kind));
     let mut renamer = LlmRenamer::new(Arc::clone(&ladder), rt.handle().clone());
+    let mut observer = VerboseObserver::new(cfg.verbose, Arc::clone(&ladder));
     let context_size = cfg.context_size;
 
     let result = rt.block_on(async move {
         tokio::task::spawn_blocking(move || {
-            rename_all_identifiers(&source, &mut renamer, context_size)
+            rename_all_identifiers_with_observer(&source, &mut renamer, context_size, &mut observer)
         })
         .await
     });
@@ -135,17 +171,119 @@ pub fn run_preset(args: PresetArgs, defaults: PresetDefaults) -> i32 {
         }
     };
 
-    if cfg.verbose {
-        let locked = ladder.locked_strategy_name().unwrap_or("none");
-        eprintln!("humanify: locked strategy: {locked}");
-    }
-
     if let Err(e) = pipe::write_output(output.as_deref(), &renamed) {
         eprintln!("humanify: failed to write output: {e}");
         return 1;
     }
 
     0
+}
+
+#[derive(Clone, Copy)]
+struct ConfigSources {
+    model_from_cli: bool,
+    api_key_from_cli: bool,
+    base_url_from_cli: bool,
+    context_size_from_cli: bool,
+    json_mode_from_cli: bool,
+    timeout_from_cli: bool,
+}
+
+fn print_verbose_config(
+    input: &str,
+    output: Option<&std::path::Path>,
+    cfg: &PresetConfig,
+    defaults: PresetDefaults,
+    sources: ConfigSources,
+    timeout_seconds: u64,
+) {
+    let source = |from_cli| {
+        if from_cli {
+            "command line"
+        } else {
+            "default"
+        }
+    };
+    eprintln!("* provider: {}", defaults.name);
+    eprintln!(
+        "* model: {} ({})",
+        cfg.model,
+        source(sources.model_from_cli)
+    );
+    eprintln!(
+        "* base URL: {} ({})",
+        cfg.base_url,
+        source(sources.base_url_from_cli)
+    );
+    match (&cfg.api_key, sources.api_key_from_cli) {
+        (Some(_), true) => eprintln!("* API key: set (command line)"),
+        (Some(_), false) => eprintln!("* API key: set ({})", defaults.api_key_env),
+        (None, _) => eprintln!("* API key: not set"),
+    }
+    eprintln!(
+        "* JSON mode: {} ({})",
+        cfg.json_mode.as_str(),
+        source(sources.json_mode_from_cli)
+    );
+    eprintln!(
+        "* context size: {} ({})",
+        cfg.context_size,
+        source(sources.context_size_from_cli)
+    );
+    eprintln!(
+        "* timeout: {timeout_seconds}s ({})",
+        source(sources.timeout_from_cli)
+    );
+    eprintln!("* input: {input}");
+    match output {
+        Some(path) => eprintln!("* output: {}", path.display()),
+        None => eprintln!("* output: stdout"),
+    }
+}
+
+struct VerboseObserver {
+    enabled: bool,
+    ladder: Arc<Ladder>,
+    reported_strategy: Option<&'static str>,
+}
+
+impl VerboseObserver {
+    fn new(enabled: bool, ladder: Arc<Ladder>) -> Self {
+        Self {
+            enabled,
+            ladder,
+            reported_strategy: None,
+        }
+    }
+
+    fn report_strategy_if_changed(&mut self) {
+        let strategy = self.ladder.locked_strategy_name();
+        if strategy.is_some() && strategy != self.reported_strategy {
+            eprintln!("* selected JSON strategy: {}", strategy.unwrap());
+            self.reported_strategy = strategy;
+        }
+    }
+}
+
+impl RenameObserver for VerboseObserver {
+    fn identifiers_found(&mut self, total: usize) {
+        if self.enabled {
+            eprintln!("* found {total} identifiers");
+        }
+    }
+
+    fn rename_started(&mut self, current: usize, total: usize, original: &str) {
+        if self.enabled {
+            eprintln!("* [{current}/{total}] renaming `{original}`");
+        }
+    }
+
+    fn rename_finished(&mut self, current: usize, total: usize, original: &str, renamed: &str) {
+        if self.enabled {
+            self.report_strategy_if_changed();
+            eprintln!("* [{current}/{total}] `{original}` -> `{renamed}`");
+        }
+    }
 }
 
 fn build_ladder(client: HttpClient, cfg: &PresetConfig, kind: ProviderKind) -> Ladder {
@@ -492,8 +630,8 @@ mod tests {
             model: None,
             api_key: None,
             base_url: None,
-            context_size: 500,
-            json_mode: json_mode.to_string(),
+            context_size: None,
+            json_mode: Some(json_mode.to_string()),
             verbose: false,
             timeout_seconds: None,
         }
