@@ -1,3 +1,4 @@
+use oxc_syntax::keyword::is_reserved_keyword;
 use unicode_ident::is_xid_continue;
 
 /// Normalize an arbitrary string into a valid JavaScript identifier.
@@ -55,55 +56,7 @@ pub fn to_identifier(raw: &str) -> String {
 /// Includes strict-mode reserved words and contextual keywords (`let`, `static`, etc.).
 /// Does NOT include `async` (contextual identifier we accept as a valid binding name).
 pub fn is_reserved_word(name: &str) -> bool {
-    matches!(
-        name,
-        "break"
-            | "case"
-            | "catch"
-            | "class"
-            | "const"
-            | "continue"
-            | "debugger"
-            | "default"
-            | "delete"
-            | "do"
-            | "else"
-            | "enum"
-            | "export"
-            | "extends"
-            | "false"
-            | "finally"
-            | "for"
-            | "function"
-            | "if"
-            | "import"
-            | "in"
-            | "instanceof"
-            | "new"
-            | "null"
-            | "return"
-            | "super"
-            | "switch"
-            | "this"
-            | "throw"
-            | "true"
-            | "try"
-            | "typeof"
-            | "var"
-            | "void"
-            | "while"
-            | "with"
-            | "yield"
-            | "let"
-            | "static"
-            | "implements"
-            | "interface"
-            | "package"
-            | "private"
-            | "protected"
-            | "public"
-            | "await"
-    )
+    is_reserved_keyword(name)
 }
 
 #[cfg(test)]

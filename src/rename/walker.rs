@@ -74,7 +74,7 @@ pub fn rename_all_identifiers(
     entries.sort_by(|a, b| b.1.cmp(&a.1).then(a.2.cmp(&b.2)));
 
     let mut visited: HashSet<SymbolId> = HashSet::new();
-    let mut collisions = CollisionResolver::new(semantic.scoping());
+    let mut collisions = CollisionResolver::new(semantic.scoping(), semantic.nodes());
 
     for (sym_id, _, _) in &entries {
         let sym_id = *sym_id;
@@ -543,6 +543,52 @@ mod tests {
         assert!(
             out.output().contains("_static"),
             "expected _static: {}",
+            out.output()
+        );
+    }
+
+    #[test]
+    fn does_not_capture_unresolved_browser_global() {
+        scenario("const a = 1; crypto.getRandomValues(new Uint8Array(a));")
+            .with_context_size(500)
+            .renamed_with(fixed("crypto"))
+            .yields("const crypto2 = 1;\ncrypto.getRandomValues(new Uint8Array(crypto2));");
+    }
+
+    #[test]
+    fn does_not_capture_unresolved_host_global() {
+        scenario("const a = 1; hostApi.consume(a);")
+            .with_context_size(500)
+            .renamed_with(fixed("hostApi"))
+            .yields("const hostApi2 = 1;\nhostApi.consume(hostApi2);");
+    }
+
+    #[test]
+    fn does_not_capture_unresolved_global_in_descendant_scope() {
+        let out = scenario("const a = 1; function f() { crypto.getRandomValues(a); }")
+            .with_context_size(500)
+            .renamed_with(mapping(&[("a", "crypto")]));
+        assert!(
+            out.output().contains("const crypto2 = 1"),
+            "outer binding must not capture a descendant global reference: {}",
+            out.output()
+        );
+    }
+
+    #[test]
+    fn sibling_scope_may_reuse_unresolved_global_name() {
+        let out =
+            scenario("function f() { hostApi.consume(); } function g() { const a = 1; return a; }")
+                .with_context_size(500)
+                .renamed_with(mapping(&[("a", "hostApi")]));
+        assert!(
+            out.output().contains("const hostApi = 1"),
+            "sibling global reference should not force a suffix: {}",
+            out.output()
+        );
+        assert!(
+            !out.output().contains("hostApi2"),
+            "sibling scopes cannot capture each other: {}",
             out.output()
         );
     }
