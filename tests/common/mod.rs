@@ -147,6 +147,16 @@ impl JudgeConfig {
             timeout: Duration::from_secs(60),
         }
     }
+
+    pub fn requesty(model: &str) -> Self {
+        Self {
+            kind: JudgeKind::OpenAICompat,
+            base_url: "https://router.requesty.ai/v1".to_string(),
+            api_key: std::env::var("REQUESTY_API_KEY").ok(),
+            model: model.to_string(),
+            timeout: Duration::from_secs(60),
+        }
+    }
 }
 
 pub async fn judge_with(cfg: &JudgeConfig, code: &str) -> anyhow::Result<String> {
@@ -305,6 +315,11 @@ impl HumanifyCmdBuilder {
 
     pub fn openrouter(mut self) -> Self {
         self.subcommand = "openrouter".to_string();
+        self
+    }
+
+    pub fn requesty(mut self) -> Self {
+        self.subcommand = "requesty".to_string();
         self
     }
 

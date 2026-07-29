@@ -1,5 +1,5 @@
 use clap::{error::ErrorKind, Parser, Subcommand};
-use humanify::cli::{anthropic, gemini, ollama, openai, openrouter};
+use humanify::cli::{anthropic, gemini, ollama, openai, openrouter, requesty};
 use std::path::PathBuf;
 
 const EXIT_CLI_USAGE: i32 = 64;
@@ -22,6 +22,7 @@ enum Commands {
     Anthropic(SubArgs),
     Ollama(SubArgs),
     Openrouter(SubArgs),
+    Requesty(SubArgs),
 }
 
 #[derive(Parser)]
@@ -133,6 +134,20 @@ fn into_openrouter_args(a: SubArgs) -> openrouter::Args {
     }
 }
 
+fn into_requesty_args(a: SubArgs) -> requesty::Args {
+    requesty::Args {
+        input: a.input,
+        output: a.output,
+        model: a.model,
+        api_key: a.api_key,
+        base_url: a.base_url,
+        context_size: a.context_size,
+        json_mode: a.json_mode,
+        verbose: a.verbose,
+        timeout_seconds: a.timeout_seconds,
+    }
+}
+
 fn main() {
     let cli = match Cli::try_parse() {
         Ok(c) => c,
@@ -153,6 +168,7 @@ fn main() {
         Commands::Anthropic(args) => anthropic::run(into_anthropic_args(args)),
         Commands::Ollama(args) => ollama::run(into_ollama_args(args)),
         Commands::Openrouter(args) => openrouter::run(into_openrouter_args(args)),
+        Commands::Requesty(args) => requesty::run(into_requesty_args(args)),
     };
 
     if exit_code != 0 {

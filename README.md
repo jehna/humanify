@@ -127,7 +127,7 @@ cargo install --git https://github.com/jehna/humanify
 ### Usage
 
 ```shell
-humanify <openai|gemini|anthropic|ollama|openrouter> [FLAGS] <INPUT>
+humanify <openai|gemini|anthropic|ollama|openrouter|requesty> [FLAGS] <INPUT>
 ```
 
 * `<INPUT>` is a file path or `-` for stdin.
@@ -243,6 +243,24 @@ Default model: `openai/gpt-oss-120b`. For free-tier usage:
 humanify openrouter obfuscated.js -m qwen/qwen3-coder:free
 ```
 
+### Requesty mode
+
+[Requesty](https://requesty.ai/) provides an OpenAI-compatible router across
+many backend models via a single API key.
+
+You'll need a Requesty API key. Sign up at https://requesty.ai/.
+
+```shell
+export REQUESTY_API_KEY=your-token
+humanify requesty obfuscated.js -o readable.js
+```
+
+Default model: `nvidia/nemotron-3-super-120b-a12b`. Override with `-m`:
+
+```shell
+humanify requesty obfuscated.js -m nvidia/nemotron-3-super-120b-a12b
+```
+
 ## Features
 
 * Uses LLMs to get smart suggestions to rename variable and function names, and
@@ -270,7 +288,7 @@ CI runs `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` on
 every PR. Provider e2e suites run against `gemini` (every PR, free tier)
 and `ollama` (every PR, runs on the GitHub runner). Other providers'
 e2e suites are label-gated (`test-openai`, `test-anthropic`,
-`test-openrouter`) to avoid burning API credits on every PR.
+`test-openrouter`, `test-requesty`) to avoid burning API credits on every PR.
 
 ## Star History
 
