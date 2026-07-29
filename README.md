@@ -255,10 +255,10 @@ export REQUESTY_API_KEY=your-token
 humanify requesty obfuscated.js -o readable.js
 ```
 
-Default model: `openai/gpt-4o-mini`. Override with `-m`:
+Default model: `nvidia/nemotron-3-super-120b-a12b`. Override with `-m`:
 
 ```shell
-humanify requesty obfuscated.js -m openai/gpt-4o-mini
+humanify requesty obfuscated.js -m nvidia/nemotron-3-super-120b-a12b
 ```
 
 ## Features

@@ -4,7 +4,7 @@ use crate::cli::preset::{run_preset, PresetArgs, PresetDefaults, ProviderKind};
 
 pub const DEFAULTS: PresetDefaults = PresetDefaults {
     base_url: "https://router.requesty.ai/v1",
-    model: "openai/gpt-4o-mini",
+    model: "nvidia/nemotron-3-super-120b-a12b",
     api_key_env: "REQUESTY_API_KEY",
     provider_kind: ProviderKind::OpenAICompat,
     timeout_seconds: 60,
@@ -49,7 +49,7 @@ mod tests {
     #[test]
     fn requesty_defaults_constants() {
         assert_eq!(DEFAULTS.base_url, "https://router.requesty.ai/v1");
-        assert_eq!(DEFAULTS.model, "openai/gpt-4o-mini");
+        assert_eq!(DEFAULTS.model, "nvidia/nemotron-3-super-120b-a12b");
         assert_eq!(DEFAULTS.api_key_env, "REQUESTY_API_KEY");
         assert!(matches!(DEFAULTS.provider_kind, ProviderKind::OpenAICompat));
     }
