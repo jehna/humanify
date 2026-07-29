@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::cli::preset::{run_preset, PresetArgs, PresetDefaults, ProviderKind};
 
 pub const DEFAULTS: PresetDefaults = PresetDefaults {
+    name: "openai",
     base_url: "https://api.openai.com/v1",
     model: "gpt-5-mini",
     api_key_env: "OPENAI_API_KEY",
@@ -17,9 +18,10 @@ pub struct Args {
     pub model: Option<String>,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
-    pub context_size: usize,
-    pub json_mode: String,
+    pub context_size: Option<usize>,
+    pub json_mode: Option<String>,
     pub verbose: bool,
+    pub progress: bool,
     pub timeout_seconds: Option<u64>,
 }
 
@@ -34,6 +36,7 @@ impl From<Args> for PresetArgs {
             context_size: a.context_size,
             json_mode: a.json_mode,
             verbose: a.verbose,
+            progress: a.progress,
             timeout_seconds: a.timeout_seconds,
         }
     }

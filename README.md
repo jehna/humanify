@@ -139,7 +139,8 @@ humanify <openai|gemini|anthropic|ollama|openrouter|requesty> [FLAGS] <INPUT>
 * `--json-mode <MODE>` pins a JSON-mode strategy. Options:
   `ladder` (default), `openai-json-schema`, `anthropic-native`,
   `forced-tool-call`, `tool-call-and-prompt`, `prompt`.
-* `-v` enables verbose stderr logging.
+* `-v` prints resolved configuration and identifier-level rename steps to stderr.
+* `--progress` shows an identifier progress bar on stderr.
 
 Run `humanify --help` for the full reference.
 

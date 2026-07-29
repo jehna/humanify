@@ -46,22 +46,26 @@ struct SubArgs {
     #[arg(long)]
     base_url: Option<String>,
 
-    /// Surrounding code chars per identifier
-    #[arg(long, default_value_t = 500)]
-    context_size: usize,
+    /// Surrounding code chars per identifier (default: 500)
+    #[arg(long)]
+    context_size: Option<usize>,
 
-    /// JSON strategy mode
-    #[arg(long, default_value = "ladder")]
-    json_mode: String,
+    /// JSON strategy mode (default: ladder)
+    #[arg(long)]
+    json_mode: Option<String>,
 
     /// Per-request HTTP timeout in seconds. Overrides the preset default
     /// (60s for hosted APIs, 1800s for Ollama).
     #[arg(long)]
     timeout_seconds: Option<u64>,
 
-    /// Debug log to stderr
+    /// Show resolved configuration and rename steps on stderr
     #[arg(short, long)]
     verbose: bool,
+
+    /// Show an identifier progress bar on stderr
+    #[arg(long)]
+    progress: bool,
 }
 
 fn into_openai_args(a: SubArgs) -> openai::Args {
@@ -74,6 +78,7 @@ fn into_openai_args(a: SubArgs) -> openai::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
@@ -88,6 +93,7 @@ fn into_gemini_args(a: SubArgs) -> gemini::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
@@ -102,6 +108,7 @@ fn into_anthropic_args(a: SubArgs) -> anthropic::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
@@ -116,6 +123,7 @@ fn into_ollama_args(a: SubArgs) -> ollama::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
@@ -130,6 +138,7 @@ fn into_openrouter_args(a: SubArgs) -> openrouter::Args {
         context_size: a.context_size,
         json_mode: a.json_mode,
         verbose: a.verbose,
+        progress: a.progress,
         timeout_seconds: a.timeout_seconds,
     }
 }
