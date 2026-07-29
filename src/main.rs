@@ -1,5 +1,5 @@
 use clap::{error::ErrorKind, Parser, Subcommand};
-use humanify::cli::{anthropic, gemini, ollama, openai, openrouter};
+use humanify::cli::{anthropic, dry_run, gemini, ollama, openai, openrouter};
 use std::path::PathBuf;
 
 const EXIT_CLI_USAGE: i32 = 64;
@@ -22,6 +22,27 @@ enum Commands {
     Anthropic(SubArgs),
     Ollama(SubArgs),
     Openrouter(SubArgs),
+    /// Walk identifiers like a real run, build the same prompt, and report
+    /// the token cost — without calling any LLM.
+    DryRun(DryRunArgs),
+}
+
+#[derive(Parser)]
+struct DryRunArgs {
+    /// Filename, or `-` for stdin
+    input: String,
+
+    /// Output file (default: stdout)
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+
+    /// Surrounding code chars per identifier
+    #[arg(long, default_value_t = 500)]
+    context_size: usize,
+
+    /// Tokenizer (cl100k_base or o200k_base)
+    #[arg(long, default_value = "cl100k_base")]
+    tokenizer: String,
 }
 
 #[derive(Parser)]
@@ -153,6 +174,12 @@ fn main() {
         Commands::Anthropic(args) => anthropic::run(into_anthropic_args(args)),
         Commands::Ollama(args) => ollama::run(into_ollama_args(args)),
         Commands::Openrouter(args) => openrouter::run(into_openrouter_args(args)),
+        Commands::DryRun(a) => dry_run::run(dry_run::Args {
+            input: a.input,
+            output: a.output,
+            context_size: a.context_size,
+            tokenizer: a.tokenizer,
+        }),
     };
 
     if exit_code != 0 {
