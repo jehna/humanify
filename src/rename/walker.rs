@@ -7,6 +7,7 @@ use oxc_semantic::{AstNodes, NodeId, Scoping, SemanticBuilder, SymbolId};
 use oxc_span::{GetSpan, SourceType};
 use oxc_str::Ident;
 
+use super::collision::CollisionResolver;
 use super::{RenameError, Renamer};
 
 pub fn rename_all_identifiers(
@@ -73,7 +74,7 @@ pub fn rename_all_identifiers(
     entries.sort_by(|a, b| b.1.cmp(&a.1).then(a.2.cmp(&b.2)));
 
     let mut visited: HashSet<SymbolId> = HashSet::new();
-    let mut taken: HashSet<String> = HashSet::new();
+    let mut collisions = CollisionResolver::new(semantic.scoping());
 
     for (sym_id, _, _) in &entries {
         let sym_id = *sym_id;
@@ -115,27 +116,23 @@ pub fn rename_all_identifiers(
             continue;
         }
 
-        // Apply safe-name normalization.
-        let mut safe = super::safe_name::to_identifier(&new_name);
+        // Apply safe-name normalization to get the base candidate.
+        let base = super::safe_name::to_identifier(&new_name);
 
-        // Collision loop: prefix with '_' until name is free.
+        // Resolve collisions in this scope chain with a numeric suffix instead
+        // of the old underscore-prefix loop (which piled up `________index`
+        // when a local model returned the same generic word many times). If the
+        // model's name already ends in a number, that number is incremented
+        // rather than a second one appended — so `...Iterator2` -> `...Iterator3`,
+        // never `...Iterator22`.
         let scope_id = semantic.scoping().symbol_scope_id(sym_id);
-        loop {
-            let already_taken = taken.contains(&safe);
-            let pre_existing = {
-                let scoping = semantic.scoping();
-                let ident = Ident::from(safe.as_str());
-                scoping.find_binding(scope_id, ident).is_some()
-            };
-            if !already_taken && !pre_existing {
-                break;
-            }
-            safe = format!("_{safe}");
-        }
+        let (safe, _collided) = super::collision::dedupe(&base, |cand| {
+            collisions.collides(semantic.scoping(), scope_id, sym_id, cand)
+        });
 
-        taken.insert(safe.clone());
-
-        // Rename in the symbol table (codegen reads from here via with_scoping).
+        // Rename in the symbol table (codegen reads from here via with_scoping),
+        // and keep the collision index in sync for later symbols.
+        collisions.commit(scope_id, &original_name, &safe);
         let new_ident = Ident::from(allocator.alloc_str(&safe));
         semantic
             .scoping_mut()
@@ -247,7 +244,7 @@ fn ceil_char_boundary(source: &str, index: usize) -> usize {
 mod tests {
     use std::collections::HashSet;
 
-    use super::super::test_dsl::{fixed, identity, queue, recording, scenario, suffix};
+    use super::super::test_dsl::{fixed, identity, mapping, queue, recording, scenario, suffix};
     use super::*;
 
     #[test]
@@ -561,8 +558,8 @@ mod tests {
             out.output()
         );
         assert!(
-            out.output().contains("const _foo = 1"),
-            "expected _foo: {}",
+            out.output().contains("const foo2 = 1"),
+            "expected numeric-suffixed foo2: {}",
             out.output()
         );
     }
@@ -573,8 +570,8 @@ mod tests {
             .with_context_size(500)
             .renamed_with(fixed("bar"));
         assert!(
-            out.output().contains("_bar"),
-            "expected _bar for renamed foo: {}",
+            out.output().contains("bar2"),
+            "expected bar2 for renamed foo: {}",
             out.output()
         );
         assert!(
@@ -582,6 +579,144 @@ mod tests {
             "expected bar to stay bar: {}",
             out.output()
         );
+    }
+
+    // --- scope-aware collision handling ---
+
+    /// Counts occurrences of `name` as a whole identifier token (bounded by
+    /// non-identifier characters), so `count_ident(s, "shared")` does not match
+    /// inside `_shared`, and `count_ident(s, "_shared")` does not match inside
+    /// `__shared`.
+    fn count_ident(hay: &str, name: &str) -> usize {
+        let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$';
+        let bytes = hay.as_bytes();
+        let mut n = 0;
+        let mut start = 0;
+        while let Some(pos) = hay[start..].find(name) {
+            let i = start + pos;
+            let before_ok = i == 0 || !is_word(hay[..i].chars().next_back().unwrap());
+            let after = i + name.len();
+            let after_ok = after >= bytes.len() || !is_word(hay[after..].chars().next().unwrap());
+            if before_ok && after_ok {
+                n += 1;
+            }
+            start = i + name.len();
+        }
+        n
+    }
+
+    #[test]
+    fn sibling_scopes_may_reuse_the_same_name_without_suffix() {
+        // Two locals the model names identically, in disjoint sibling functions.
+        // JS allows this, so neither should accrue a suffix.
+        let out = scenario("function f() { var a = 1; } function g() { var b = 2; }")
+            .with_context_size(500)
+            .renamed_with(mapping(&[("a", "shared"), ("b", "shared")]));
+        let o = out.output();
+        assert_eq!(
+            count_ident(o, "shared"),
+            2,
+            "both sibling locals should be bare `shared`: {o}"
+        );
+        assert!(
+            !o.contains("shared2"),
+            "sibling reuse must not add a numeric suffix: {o}"
+        );
+    }
+
+    #[test]
+    fn same_scope_conflict_gets_numeric_suffix() {
+        // Two bindings in the SAME scope cannot share a name; the second becomes
+        // `shared2` rather than `_shared`.
+        let out = scenario("const a = 1; const b = 2;")
+            .with_context_size(500)
+            .renamed_with(mapping(&[("a", "shared"), ("b", "shared")]));
+        let o = out.output();
+        assert_eq!(count_ident(o, "shared"), 1, "one bare `shared`: {o}");
+        assert_eq!(count_ident(o, "shared2"), 1, "one `shared2`: {o}");
+        assert!(!o.contains("shared3"), "only two colliding names: {o}");
+        assert!(!o.contains("_shared"), "must not underscore-prefix: {o}");
+    }
+
+    #[test]
+    fn shadowing_conflict_across_nesting_gets_numeric_suffix() {
+        // An outer binding and a nested binding cannot both be `shared`, or a
+        // reference would be captured. Exactly one becomes `shared2`, regardless
+        // of traversal order.
+        let out = scenario("var a = 1; function f() { var b = 2; return a; }")
+            .with_context_size(500)
+            .renamed_with(mapping(&[("a", "shared"), ("b", "shared")]));
+        let o = out.output();
+        assert!(o.contains("shared2"), "one conflict becomes `shared2`: {o}");
+        assert!(!o.contains("shared3"), "only two colliding names: {o}");
+        assert!(!o.contains("_shared"), "must not underscore-prefix: {o}");
+    }
+
+    #[test]
+    fn no_suffix_pileup_across_many_disjoint_scopes() {
+        // Regression for the `________index` pileup: many disjoint scopes each
+        // naming their local `index` must all stay bare `index`.
+        let mut src = String::new();
+        for i in 0..10 {
+            src.push_str(&format!("function f{i}() {{ var v{i} = {i}; }} "));
+        }
+        let pairs: Vec<(String, String)> = (0..10)
+            .map(|i| (format!("v{i}"), "index".to_string()))
+            .collect();
+        let pair_refs: Vec<(&str, &str)> = pairs
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let out = scenario(&src)
+            .with_context_size(500)
+            .renamed_with(mapping(&pair_refs));
+        let o = out.output();
+        assert_eq!(
+            count_ident(o, "index"),
+            10,
+            "all ten locals should be bare: {o}"
+        );
+        assert!(!o.contains("index2"), "no numeric-suffix pileup: {o}");
+    }
+
+    #[test]
+    fn descendant_capture_is_prevented_with_numeric_suffix() {
+        // Renaming the OUTER `a` to a name already bound in a nested scope would
+        // capture the `return a` reference (it would resolve to the inner `x`).
+        // The descendant check must force a suffix even though `find_binding`
+        // (which only walks *up*) can't see the nested binding. Outer becomes
+        // `x2`, and the inner `x` and the outer reference stay correct.
+        let out = scenario("var a = 1; function f() { var x = 2; return a + x; }")
+            .with_context_size(500)
+            .renamed_with(mapping(&[("a", "x")]));
+        let o = out.output();
+        assert_eq!(
+            count_ident(o, "x2"),
+            2,
+            "outer decl + its reference should both be `x2`: {o}"
+        );
+        assert_eq!(
+            count_ident(o, "x"),
+            2,
+            "inner decl + its reference should stay bare `x`: {o}"
+        );
+        assert!(!o.contains("x3"), "only one conflict: {o}");
+    }
+
+    #[test]
+    fn same_scope_numeric_names_increment_not_append() {
+        // Three same-scope bindings the model all names `item2`: the suffix must
+        // increment (`item2` -> `item3` -> `item4`), never append a second digit
+        // (`item22`) or fall back to an underscore.
+        let out = scenario("const a = 1; const b = 2; const c = 3;")
+            .with_context_size(500)
+            .renamed_with(mapping(&[("a", "item2"), ("b", "item2"), ("c", "item2")]));
+        let o = out.output();
+        assert_eq!(count_ident(o, "item2"), 1, "one `item2`: {o}");
+        assert_eq!(count_ident(o, "item3"), 1, "one `item3`: {o}");
+        assert_eq!(count_ident(o, "item4"), 1, "one `item4`: {o}");
+        assert!(!o.contains("item22"), "must increment, not append: {o}");
+        assert!(!o.contains("_item"), "must not underscore-prefix: {o}");
     }
 
     #[test]

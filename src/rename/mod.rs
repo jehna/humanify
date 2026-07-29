@@ -1,3 +1,4 @@
+mod collision;
 mod safe_name;
 #[cfg(test)]
 pub mod test_dsl;
