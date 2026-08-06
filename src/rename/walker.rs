@@ -80,8 +80,10 @@ pub fn rename_all_identifiers_with_observer(
             .collect()
     };
 
-    // Sort: largest scope first; ties broken by source position (ascending).
-    entries.sort_by(|a, b| b.1.cmp(&a.1).then(a.2.cmp(&b.2)));
+    // Rename the smallest scopes first so names discovered for inner helpers and
+    // locals can appear in the context used to name their enclosing scopes.
+    // Within a scope, retain declaration order.
+    entries.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)));
     let total = entries.len();
     observer.identifiers_found(total);
 
@@ -120,7 +122,20 @@ pub fn rename_all_identifiers_with_observer(
                 source,
                 binding_scope,
             );
-            compute_context_window(source, sym_span, ctx_span, context_size)
+            // Render small scopes through the live scoping so earlier renames
+            // appear in later prompts. Keep raw source slicing as the bounded
+            // fallback for large scopes and unsupported node kinds.
+            let ctx_len = ctx_span.end.saturating_sub(ctx_span.start) as usize;
+            if ctx_len > 0 && ctx_len <= context_size {
+                let scope_node_id = scoping.get_node_id(binding_scope);
+                let kind = nodes.get_node(scope_node_id).kind();
+                let cloned_scoping = scoping.clone_in_with_semantic_ids_with_another_arena();
+                super::render::codegen_scope_node(kind, cloned_scoping).unwrap_or_else(|| {
+                    compute_context_window(source, sym_span, ctx_span, context_size)
+                })
+            } else {
+                compute_context_window(source, sym_span, ctx_span, context_size)
+            }
         };
 
         let new_name = renamer.rename(&original_name, &surrounding);
@@ -306,18 +321,18 @@ mod tests {
     }
 
     #[test]
-    fn renames_two_scopes_largest_first() {
+    fn renames_two_scopes_innermost_first() {
         let out = scenario("const a = 1; (function () { const b = 2; });")
             .with_context_size(500)
             .renamed_with(queue(&["c", "d"]));
         assert!(
-            out.output().contains("const c = 1"),
-            "expected c: {}",
+            out.output().contains("const d = 1"),
+            "expected outer a -> d: {}",
             out.output()
         );
         assert!(
-            out.output().contains("const d = 2"),
-            "expected d: {}",
+            out.output().contains("const c = 2"),
+            "expected inner b -> c: {}",
             out.output()
         );
     }
@@ -325,17 +340,18 @@ mod tests {
     #[test]
     fn renames_shadowed_variables() {
         // Two independent bindings named 'a' — each gets its own rename call (symbol_id keyed).
+        // The inner binding is processed first.
         let out = scenario("const a = 1; (function () { const a = 2; });")
             .with_context_size(500)
             .renamed_with(queue(&["b", "c"]));
         assert!(
-            out.output().contains("const b = 1"),
-            "expected outer b: {}",
+            out.output().contains("const c = 1"),
+            "expected outer c: {}",
             out.output()
         );
         assert!(
-            out.output().contains("const c = 2"),
-            "expected inner c: {}",
+            out.output().contains("const b = 2"),
+            "expected inner b: {}",
             out.output()
         );
     }
@@ -383,7 +399,7 @@ mod tests {
         let (_, log) = scenario(SCOPE_INPUT)
             .with_context_size(500)
             .with_recording(recording("_x"));
-        assert_eq!(log.call_names(), &["a", "foo", "b", "Bar", "y"]);
+        assert_eq!(log.call_names(), &["y", "b", "Bar", "a", "foo"]);
     }
 
     #[test]
@@ -396,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn scopes_renamed_largest_to_smallest() {
+    fn scopes_renamed_smallest_to_largest() {
         let input = "function foo() { function bar() { function baz() { const qux = 1; } } }";
         let (_, log) = scenario(input)
             .with_context_size(500)
@@ -404,8 +420,34 @@ mod tests {
         let names: Vec<&str> = log.0.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(
             names,
-            &["foo", "bar", "baz", "qux"],
-            "expected largest-first: {names:?}"
+            &["qux", "baz", "foo", "bar"],
+            "expected smallest-first: {names:?}"
+        );
+    }
+
+    #[test]
+    fn later_sibling_context_contains_earlier_rename() {
+        let (_, log) = scenario("function f() { const a = 1; const b = a + 1; }")
+            .with_context_size(500)
+            .with_recording(recording("_named"));
+
+        let b_scope = log.scope_for("b");
+        assert!(
+            b_scope.contains("a_named"),
+            "later sibling context should contain the earlier rename: {b_scope}"
+        );
+    }
+
+    #[test]
+    fn outer_context_contains_inner_rename() {
+        let (_, log) = scenario("const padding = 0; function a() { const b = 1; return b; }")
+            .with_context_size(500)
+            .with_recording(recording("_named"));
+
+        let outer_scope = log.scope_for("a");
+        assert!(
+            outer_scope.contains("b_named"),
+            "outer context should contain the inner rename: {outer_scope}"
         );
     }
 
@@ -463,8 +505,9 @@ mod tests {
             .map(|(_, s)| s.as_str())
             .expect("expected call for 'x'");
         assert_eq!(
-            scope, input,
-            "surrounding_code for top-level binding should be the full source"
+            scope.trim_end(),
+            input,
+            "surrounding_code for top-level binding should render the full source"
         );
     }
 
