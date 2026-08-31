@@ -1,6 +1,8 @@
 use anyhow::anyhow;
 use serde_json::Value;
 use std::time::Duration;
+use std::env;
+use std::fs;
 
 #[derive(Clone)]
 pub struct HttpClient {
@@ -13,10 +15,26 @@ impl HttpClient {
     }
 
     pub fn with_timeout(timeout: Duration) -> Self {
-        let inner = reqwest::Client::builder()
-            .timeout(timeout)
+        let mut builder = reqwest::Client::builder()
+            .timeout(timeout);
+
+        if let Ok(ca_path) = env::var("SSL_CERT_FILE") {
+            let cert_bytes = fs::read(&ca_path)
+                .unwrap_or_else(|e| panic!("Failed to read CA file at '{}': {}", ca_path, e));
+            
+            let ca_certs = reqwest::Certificate::from_pem_bundle(&cert_bytes)
+                .expect("Failed to parse SSL_CERT_FILE bundle contents as PEM");
+
+            for cert in ca_certs {
+                builder = builder.add_root_certificate(cert);
+            }
+        }
+
+        // 3. Build the final inner client
+        let inner = builder
             .build()
             .expect("reqwest client init failed");
+
         Self { inner }
     }
 
