@@ -18,10 +18,18 @@ pub struct Args {
     pub api_key: Option<String>,
     pub base_url: Option<String>,
     pub context_size: Option<usize>,
+    pub cache_context_size: Option<usize>,
     pub json_mode: Option<String>,
     pub verbose: bool,
     pub progress: bool,
     pub timeout_seconds: Option<u64>,
+    pub cache_dir: Option<PathBuf>,
+    pub no_cache: bool,
+    pub refresh_cache: bool,
+    pub max_retries: Option<u32>,
+    pub max_run_seconds: Option<u64>,
+    pub max_tokens: Option<u32>,
+    pub extra_body: Option<String>,
 }
 
 impl From<Args> for PresetArgs {
@@ -33,10 +41,18 @@ impl From<Args> for PresetArgs {
             api_key: a.api_key,
             base_url: a.base_url,
             context_size: a.context_size,
+            cache_context_size: a.cache_context_size,
             json_mode: a.json_mode,
             verbose: a.verbose,
             progress: a.progress,
             timeout_seconds: a.timeout_seconds,
+            cache_dir: a.cache_dir,
+            no_cache: a.no_cache,
+            refresh_cache: a.refresh_cache,
+            max_retries: a.max_retries,
+            max_run_seconds: a.max_run_seconds,
+            max_tokens: a.max_tokens,
+            extra_body: a.extra_body,
         }
     }
 }

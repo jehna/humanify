@@ -55,12 +55,16 @@ impl Ladder {
             let strategy = &self.strategies[locked_idx];
             return match strategy.call(system, user, schema).await {
                 Ok(v) => Ok(v),
-                Err(StrategyError::Transient(e)) => Err(StrategyError::Transient(e)),
+                Err(e @ (StrategyError::Transient(_) | StrategyError::Permanent(_))) => Err(e),
                 Err(StrategyError::NotSupported(reason)) => {
                     if self.strategies.len() == 1 {
-                        // Pinned: no fallback. Convert to Transient without marking dead
-                        // so subsequent calls can retry.
-                        Err(StrategyError::Transient(anyhow!(
+                        // Pinned: no fallback exists. The provider rejects this
+                        // strategy for this endpoint/model, and will keep doing so,
+                        // so surface it as Permanent — retrying it just multiplies
+                        // the same rejection by `max_retries`. Not marked dead: the
+                        // user pinned it, and a Ladder of one has nothing to fall
+                        // back to anyway.
+                        Err(StrategyError::Permanent(anyhow!(
                             "strategy '{}' returned NotSupported: {}",
                             strategy.name(),
                             reason
@@ -106,15 +110,18 @@ impl Ladder {
                     not_supported_reasons.push(format!("{} ({})", strategy.name(), reason));
                     // Continue to next strategy.
                 }
-                Err(StrategyError::Transient(e)) => {
-                    // Don't lock, don't mark dead. Caller retries the whole operation.
-                    return Err(StrategyError::Transient(e));
+                Err(e @ (StrategyError::Transient(_) | StrategyError::Permanent(_))) => {
+                    // Don't lock, don't mark dead. The caller decides whether to
+                    // retry, based on which of the two this is.
+                    return Err(e);
                 }
             }
         }
 
-        // All strategies exhausted (all dead or all returned NotSupported this call).
-        Err(StrategyError::Transient(anyhow!(
+        // All strategies exhausted (all dead or all returned NotSupported this
+        // call). Every strategy this build knows about has been rejected by the
+        // provider — Permanent, because the next attempt has the same empty menu.
+        Err(StrategyError::Permanent(anyhow!(
             "all JSON-mode strategies failed: {}",
             not_supported_reasons.join(", ")
         )))
@@ -196,7 +203,16 @@ mod tests {
         let outcome = ladder_with(vec![s0.clone(), not_supported("s1", "unused")])
             .called_n_times(1)
             .await;
-        outcome.errors_with("network error");
+        outcome.errors_transiently_with("network error");
+    }
+
+    #[tokio::test]
+    async fn permanent_propagates_no_lock_no_dead() {
+        let s0 = script("s0", vec![ScriptedResponse::Permanent("bad api key".into())]);
+        let outcome = ladder_with(vec![s0, not_supported("s1", "unused")])
+            .called_n_times(1)
+            .await;
+        outcome.errors_permanently_with("bad api key");
     }
 
     #[tokio::test]
@@ -219,7 +235,8 @@ mod tests {
         ])
         .called_n_times(1)
         .await;
-        outcome.errors_with("all");
+        // Nothing left to try — retrying re-runs the same exhausted menu.
+        outcome.errors_permanently_with("all");
     }
 
     #[tokio::test]
@@ -247,14 +264,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pinned_unsupported_becomes_transient() {
+    async fn pinned_unsupported_becomes_permanent() {
         let outcome = pinned_with(script(
             "s0",
             vec![ScriptedResponse::NotSupported("nope".into())],
         ))
         .called_n_times(1)
         .await;
-        outcome.errors_with("nope");
+        outcome.errors_permanently_with("nope");
     }
 
     #[tokio::test]
@@ -265,7 +282,7 @@ mod tests {
         ))
         .called_n_times(1)
         .await;
-        outcome.errors_with("network");
+        outcome.errors_transiently_with("network");
     }
 
     #[test]

@@ -13,7 +13,10 @@ use crate::llm::{http::StrategyError, JsonStrategy, Ladder};
 pub enum ScriptedResponse {
     Ok(Value),
     NotSupported(String),
+    /// Retryable failure (network / 429 / 5xx).
     Transient(String),
+    /// Non-retryable failure (bad key, bad model, unparseable answer).
+    Permanent(String),
 }
 
 // --- ScriptedStrategy ---
@@ -68,6 +71,7 @@ impl JsonStrategy for ScriptedStrategy {
             ScriptedResponse::Ok(v) => Ok(v),
             ScriptedResponse::NotSupported(r) => Err(StrategyError::NotSupported(r)),
             ScriptedResponse::Transient(r) => Err(StrategyError::Transient(anyhow!("{}", r))),
+            ScriptedResponse::Permanent(r) => Err(StrategyError::Permanent(anyhow!("{}", r))),
         }
     }
 
@@ -198,6 +202,26 @@ impl LadderOutcome {
         }
     }
 
+    /// Like `errors_with`, but also pins the retry classification — the thing
+    /// `LlmRenamer` branches on.
+    pub fn errors_transiently_with(self, substring: &str) {
+        assert!(
+            matches!(self.last(), Err(e) if e.is_transient()),
+            "expected a Transient (retryable) error, got: {:?}",
+            self.last()
+        );
+        self.errors_with(substring);
+    }
+
+    pub fn errors_permanently_with(self, substring: &str) {
+        assert!(
+            matches!(self.last(), Err(e) if e.is_permanent()),
+            "expected a Permanent (non-retryable) error, got: {:?}",
+            self.last()
+        );
+        self.errors_with(substring);
+    }
+
     pub fn succeeds_with(self, expected: &Value) {
         match self.last() {
             Ok(v) => assert_eq!(v, expected),
@@ -223,19 +247,22 @@ pub fn extract_succeeds(result: Result<Value, StrategyError>, expected: &Value) 
     }
 }
 
-/// Assert that a helper extraction function returns a Transient error containing substring.
+/// Assert that a helper extraction function rejects the response with an error
+/// containing `substring`. An unusable response body is `Permanent` (retrying the
+/// same request re-reads the same body); `NotSupported` would be wrong here,
+/// because that variant makes the ladder abandon the strategy for the whole run.
 pub fn extract_fails_with(result: Result<Value, StrategyError>, substring: &str) {
     match result {
-        Err(StrategyError::Transient(e)) => {
+        Err(StrategyError::Permanent(e)) | Err(StrategyError::Transient(e)) => {
             let msg = e.to_string();
             assert!(
                 substring.is_empty() || msg.contains(substring),
                 "error should contain {substring:?}, got: {msg}"
             );
         }
-        Ok(v) => panic!("expected Transient error, got Ok({v})"),
+        Ok(v) => panic!("expected a response-rejection error, got Ok({v})"),
         Err(StrategyError::NotSupported(r)) => {
-            panic!("expected Transient, got NotSupported({r})")
+            panic!("expected Permanent, got NotSupported({r})")
         }
     }
 }
