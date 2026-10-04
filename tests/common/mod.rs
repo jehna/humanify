@@ -157,6 +157,16 @@ impl JudgeConfig {
             timeout: Duration::from_secs(60),
         }
     }
+
+    pub fn cheaperinference(model: &str) -> Self {
+        Self {
+            kind: JudgeKind::OpenAICompat,
+            base_url: "https://api.cheaperinference.com/v1".to_string(),
+            api_key: std::env::var("CHEAPER_INFERENCE_API_KEY").ok(),
+            model: model.to_string(),
+            timeout: Duration::from_secs(60),
+        }
+    }
 }
 
 pub async fn judge_with(cfg: &JudgeConfig, code: &str) -> anyhow::Result<String> {
@@ -320,6 +330,11 @@ impl HumanifyCmdBuilder {
 
     pub fn requesty(mut self) -> Self {
         self.subcommand = "requesty".to_string();
+        self
+    }
+
+    pub fn cheaperinference(mut self) -> Self {
+        self.subcommand = "cheaperinference".to_string();
         self
     }
 
