@@ -1,5 +1,5 @@
 use clap::{error::ErrorKind, Parser, Subcommand};
-use humanify::cli::{anthropic, gemini, ollama, openai, openrouter, requesty};
+use humanify::cli::{anthropic, cheaperinference, gemini, ollama, openai, openrouter, requesty};
 use std::path::PathBuf;
 
 const EXIT_CLI_USAGE: i32 = 64;
@@ -23,6 +23,7 @@ enum Commands {
     Ollama(SubArgs),
     Openrouter(SubArgs),
     Requesty(SubArgs),
+    Cheaperinference(SubArgs),
 }
 
 #[derive(Parser)]
@@ -158,6 +159,21 @@ fn into_requesty_args(a: SubArgs) -> requesty::Args {
     }
 }
 
+fn into_cheaperinference_args(a: SubArgs) -> cheaperinference::Args {
+    cheaperinference::Args {
+        input: a.input,
+        output: a.output,
+        model: a.model,
+        api_key: a.api_key,
+        base_url: a.base_url,
+        context_size: a.context_size,
+        json_mode: a.json_mode,
+        verbose: a.verbose,
+        progress: a.progress,
+        timeout_seconds: a.timeout_seconds,
+    }
+}
+
 fn main() {
     let cli = match Cli::try_parse() {
         Ok(c) => c,
@@ -179,6 +195,7 @@ fn main() {
         Commands::Ollama(args) => ollama::run(into_ollama_args(args)),
         Commands::Openrouter(args) => openrouter::run(into_openrouter_args(args)),
         Commands::Requesty(args) => requesty::run(into_requesty_args(args)),
+        Commands::Cheaperinference(args) => cheaperinference::run(into_cheaperinference_args(args)),
     };
 
     if exit_code != 0 {
