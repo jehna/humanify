@@ -53,7 +53,7 @@ fn verbose_reports_resolved_config_and_rename_steps_to_stderr() {
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(stderr.contains("* provider: openai"), "stderr:\n{stderr}");
     assert!(
-        stderr.contains("* model: gpt-5-mini (default)"),
+        stderr.contains("* model: gpt-6.1-terra (default)"),
         "stderr:\n{stderr}"
     );
     assert!(
