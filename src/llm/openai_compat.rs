@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use crate::llm::{
+    body::BodyOptions,
     http::{HttpClient, StrategyError},
     JsonStrategy,
 };
@@ -26,6 +27,7 @@ pub struct OpenAIJsonSchema {
     base_url: String,
     api_key: Option<String>,
     model: String,
+    body_options: BodyOptions,
 }
 
 impl OpenAIJsonSchema {
@@ -40,28 +42,21 @@ impl OpenAIJsonSchema {
             base_url,
             api_key,
             model,
+            body_options: BodyOptions::default(),
         }
+    }
+
+    pub fn with_body_options(mut self, body_options: BodyOptions) -> Self {
+        self.body_options = body_options;
+        self
     }
 }
 
 #[async_trait]
 impl JsonStrategy for OpenAIJsonSchema {
     async fn call(&self, system: &str, user: &str, schema: &Value) -> Result<Value, StrategyError> {
-        let body = json!({
-            "model": self.model,
-            "messages": [
-                { "role": "system", "content": system },
-                { "role": "user",   "content": user   }
-            ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "humanify_response",
-                    "strict": true,
-                    "schema": schema
-                }
-            }
-        });
+        let mut body = build_json_schema_body(&self.model, system, user, schema);
+        self.body_options.apply(&mut body);
 
         let response = self
             .client
@@ -88,6 +83,7 @@ pub struct ForcedToolCall {
     base_url: String,
     api_key: Option<String>,
     model: String,
+    body_options: BodyOptions,
 }
 
 impl ForcedToolCall {
@@ -102,14 +98,21 @@ impl ForcedToolCall {
             base_url,
             api_key,
             model,
+            body_options: BodyOptions::default(),
         }
+    }
+
+    pub fn with_body_options(mut self, body_options: BodyOptions) -> Self {
+        self.body_options = body_options;
+        self
     }
 }
 
 #[async_trait]
 impl JsonStrategy for ForcedToolCall {
     async fn call(&self, system: &str, user: &str, schema: &Value) -> Result<Value, StrategyError> {
-        let body = build_tool_call_body(&self.model, system, user, schema);
+        let mut body = build_tool_call_body(&self.model, system, user, schema);
+        self.body_options.apply(&mut body);
 
         let response = self
             .client
@@ -136,6 +139,7 @@ pub struct ToolCallAndPrompt {
     base_url: String,
     api_key: Option<String>,
     model: String,
+    body_options: BodyOptions,
 }
 
 impl ToolCallAndPrompt {
@@ -150,7 +154,13 @@ impl ToolCallAndPrompt {
             base_url,
             api_key,
             model,
+            body_options: BodyOptions::default(),
         }
+    }
+
+    pub fn with_body_options(mut self, body_options: BodyOptions) -> Self {
+        self.body_options = body_options;
+        self
     }
 }
 
@@ -158,7 +168,8 @@ impl ToolCallAndPrompt {
 impl JsonStrategy for ToolCallAndPrompt {
     async fn call(&self, system: &str, user: &str, schema: &Value) -> Result<Value, StrategyError> {
         let augmented_system = format!("{system}{TOOL_NUDGE}");
-        let body = build_tool_call_body(&self.model, &augmented_system, user, schema);
+        let mut body = build_tool_call_body(&self.model, &augmented_system, user, schema);
+        self.body_options.apply(&mut body);
 
         let response = self
             .client
@@ -185,6 +196,7 @@ pub struct PromptToJson {
     base_url: String,
     api_key: Option<String>,
     model: String,
+    body_options: BodyOptions,
 }
 
 impl PromptToJson {
@@ -199,7 +211,13 @@ impl PromptToJson {
             base_url,
             api_key,
             model,
+            body_options: BodyOptions::default(),
         }
+    }
+
+    pub fn with_body_options(mut self, body_options: BodyOptions) -> Self {
+        self.body_options = body_options;
+        self
     }
 }
 
@@ -207,16 +225,11 @@ impl PromptToJson {
 impl JsonStrategy for PromptToJson {
     async fn call(&self, system: &str, user: &str, schema: &Value) -> Result<Value, StrategyError> {
         let schema_text = serde_json::to_string(schema)
-            .map_err(|e| StrategyError::Transient(anyhow!("failed to serialize schema: {e}")))?;
+            .map_err(|e| StrategyError::Permanent(anyhow!("failed to serialize schema: {e}")))?;
         let augmented_system = format!("{system}{JSON_INSTRUCTION}{schema_text}");
 
-        let body = json!({
-            "model": self.model,
-            "messages": [
-                { "role": "system", "content": augmented_system },
-                { "role": "user",   "content": user             }
-            ]
-        });
+        let mut body = build_prompt_body(&self.model, &augmented_system, user);
+        self.body_options.apply(&mut body);
 
         let response = self
             .client
@@ -237,6 +250,34 @@ impl JsonStrategy for PromptToJson {
 }
 
 // --- Private helpers ---
+
+fn build_prompt_body(model: &str, system: &str, user: &str) -> Value {
+    json!({
+        "model": model,
+        "messages": [
+            { "role": "system", "content": system },
+            { "role": "user",   "content": user   }
+        ]
+    })
+}
+
+fn build_json_schema_body(model: &str, system: &str, user: &str, schema: &Value) -> Value {
+    json!({
+        "model": model,
+        "messages": [
+            { "role": "system", "content": system },
+            { "role": "user",   "content": user   }
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": TOOL_NAME,
+                "strict": true,
+                "schema": schema
+            }
+        }
+    })
+}
 
 fn build_tool_call_body(model: &str, system: &str, user: &str, schema: &Value) -> Value {
     json!({
@@ -265,11 +306,11 @@ fn extract_content(response: &Value) -> Result<Value, StrategyError> {
         .get("choices")
         .and_then(|c| c.as_array())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!("OpenAIJsonSchema: response had no choices"))
+            StrategyError::Permanent(anyhow!("OpenAIJsonSchema: response had no choices"))
         })?;
 
     if choices.is_empty() {
-        return Err(StrategyError::Transient(anyhow!(
+        return Err(StrategyError::Permanent(anyhow!(
             "OpenAIJsonSchema: response had no choices"
         )));
     }
@@ -279,17 +320,17 @@ fn extract_content(response: &Value) -> Result<Value, StrategyError> {
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!(
+            StrategyError::Permanent(anyhow!(
                 "OpenAIJsonSchema: message.content was not a string"
             ))
         })?;
 
     // Strip BOM and leading whitespace before parsing.
-    // Markdown fences → Transient; PromptToJson handles fence stripping, not this strategy.
+    // Markdown fences → Permanent; PromptToJson handles fence stripping, not this strategy.
     let trimmed = content.trim_start_matches('\u{feff}').trim_start();
 
     serde_json::from_str(trimmed).map_err(|e| {
-        StrategyError::Transient(anyhow!(
+        StrategyError::Permanent(anyhow!(
             "OpenAIJsonSchema: model returned non-JSON content: {e}"
         ))
     })
@@ -300,40 +341,40 @@ fn extract_tool_call_arguments(response: &Value) -> Result<Value, StrategyError>
         .get("choices")
         .and_then(|c| c.as_array())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!("tool-call strategy: response had no choices"))
+            StrategyError::Permanent(anyhow!("tool-call strategy: response had no choices"))
         })?;
 
     if choices.is_empty() {
-        return Err(StrategyError::Transient(anyhow!(
+        return Err(StrategyError::Permanent(anyhow!(
             "tool-call strategy: response had no choices"
         )));
     }
 
     let message = choices[0]
         .get("message")
-        .ok_or_else(|| StrategyError::Transient(anyhow!("tool-call strategy: no message")))?;
+        .ok_or_else(|| StrategyError::Permanent(anyhow!("tool-call strategy: no message")))?;
 
     let tool_calls = message
         .get("tool_calls")
         .and_then(|tc| tc.as_array())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!("tool-call strategy: no tool_calls in response"))
+            StrategyError::Permanent(anyhow!("tool-call strategy: no tool_calls in response"))
         })?;
 
     if tool_calls.is_empty() {
-        return Err(StrategyError::Transient(anyhow!(
+        return Err(StrategyError::Permanent(anyhow!(
             "tool-call strategy: tool_calls array was empty"
         )));
     }
 
     let function = tool_calls[0]
         .get("function")
-        .ok_or_else(|| StrategyError::Transient(anyhow!("tool-call strategy: no function")))?;
+        .ok_or_else(|| StrategyError::Permanent(anyhow!("tool-call strategy: no function")))?;
 
     // Verify the model called the right tool (not a hallucinated one).
     let fn_name = function.get("name").and_then(|n| n.as_str()).unwrap_or("");
     if fn_name != TOOL_NAME {
-        return Err(StrategyError::Transient(anyhow!(
+        return Err(StrategyError::Permanent(anyhow!(
             "tool-call strategy: model called unexpected function '{fn_name}'"
         )));
     }
@@ -342,13 +383,13 @@ fn extract_tool_call_arguments(response: &Value) -> Result<Value, StrategyError>
         .get("arguments")
         .and_then(|a| a.as_str())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!("tool-call strategy: arguments was not a string"))
+            StrategyError::Permanent(anyhow!("tool-call strategy: arguments was not a string"))
         })?;
 
     let trimmed = arguments.trim_start_matches('\u{feff}').trim_start();
 
     serde_json::from_str(trimmed).map_err(|e| {
-        StrategyError::Transient(anyhow!("tool-call strategy: invalid JSON arguments: {e}"))
+        StrategyError::Permanent(anyhow!("tool-call strategy: invalid JSON arguments: {e}"))
     })
 }
 
@@ -357,11 +398,11 @@ fn extract_prompt_content_as_json(response: &Value) -> Result<Value, StrategyErr
         .get("choices")
         .and_then(|c| c.as_array())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!("PromptToJson: response had no choices"))
+            StrategyError::Permanent(anyhow!("PromptToJson: response had no choices"))
         })?;
 
     if choices.is_empty() {
-        return Err(StrategyError::Transient(anyhow!(
+        return Err(StrategyError::Permanent(anyhow!(
             "PromptToJson: response had no choices"
         )));
     }
@@ -371,14 +412,14 @@ fn extract_prompt_content_as_json(response: &Value) -> Result<Value, StrategyErr
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!("PromptToJson: message.content was not a string"))
+            StrategyError::Permanent(anyhow!("PromptToJson: message.content was not a string"))
         })?;
 
     // Strip BOM, then trim whitespace.
     let content = content.trim_start_matches('\u{feff}').trim();
 
     // One-shot markdown fence stripping. Only when content starts with ```.
-    // Prose before a fence (e.g. "Here you go:\n```json...") → no strip → Transient.
+    // Prose before a fence (e.g. "Here you go:\n```json...") → no strip → Permanent.
     let to_parse = if content.starts_with("```") {
         let after_first_fence = content.split_once('\n').map(|x| x.1).unwrap_or("");
         let stripped = after_first_fence
@@ -391,7 +432,7 @@ fn extract_prompt_content_as_json(response: &Value) -> Result<Value, StrategyErr
     };
 
     serde_json::from_str(to_parse).map_err(|e| {
-        StrategyError::Transient(anyhow!(
+        StrategyError::Permanent(anyhow!(
             "PromptToJson: model returned non-JSON content: {e}"
         ))
     })
@@ -403,6 +444,59 @@ mod tests {
     use serde_json::json;
 
     use crate::llm::test_dsl::{extract_fails_with, extract_succeeds};
+
+    // --- request bodies ---
+
+    fn body_options() -> BodyOptions {
+        BodyOptions {
+            max_tokens: Some(64),
+            extra: crate::llm::body::parse_extra_body(r#"{"thinking":{"type":"disabled"}}"#)
+                .unwrap(),
+        }
+    }
+
+    /// Every OpenAI-compatible strategy must honour --max-tokens/--extra-body;
+    /// a rung that silently ignored them would leave a reasoning model thinking
+    /// for minutes on the fallback path.
+    fn assert_options_applied(mut body: Value) {
+        body_options().apply(&mut body);
+        assert_eq!(body["max_tokens"], json!(64));
+        assert_eq!(body["thinking"], json!({"type": "disabled"}));
+        assert!(body["messages"].is_array(), "prompt survives the merge");
+    }
+
+    #[test]
+    fn prompt_body_takes_options() {
+        assert_options_applied(build_prompt_body("m", "sys", "usr"));
+    }
+
+    #[test]
+    fn json_schema_body_takes_options() {
+        assert_options_applied(build_json_schema_body("m", "sys", "usr", &json!({})));
+    }
+
+    #[test]
+    fn tool_call_body_takes_options() {
+        assert_options_applied(build_tool_call_body("m", "sys", "usr", &json!({})));
+    }
+
+    #[test]
+    fn json_schema_body_keeps_schema_shape() {
+        let body = build_json_schema_body("m", "sys", "usr", &json!({"type": "object"}));
+        assert_eq!(body["response_format"]["type"], json!("json_schema"));
+        assert_eq!(
+            body["response_format"]["json_schema"]["name"],
+            json!(TOOL_NAME)
+        );
+        assert_eq!(
+            body["response_format"]["json_schema"]["strict"],
+            json!(true)
+        );
+        assert_eq!(
+            body["response_format"]["json_schema"]["schema"],
+            json!({"type": "object"})
+        );
+    }
 
     // --- extract_content (OpenAIJsonSchema) ---
 

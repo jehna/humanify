@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use crate::llm::{
+    body::BodyOptions,
     http::{HttpClient, StrategyError},
     JsonStrategy,
 };
@@ -50,6 +51,7 @@ pub struct AnthropicNativeJsonSchema {
     base_url: String,
     api_key: Option<String>,
     model: String,
+    body_options: BodyOptions,
 }
 
 impl AnthropicNativeJsonSchema {
@@ -64,25 +66,21 @@ impl AnthropicNativeJsonSchema {
             base_url,
             api_key,
             model,
+            body_options: BodyOptions::default(),
         }
+    }
+
+    pub fn with_body_options(mut self, body_options: BodyOptions) -> Self {
+        self.body_options = body_options;
+        self
     }
 }
 
 #[async_trait]
 impl JsonStrategy for AnthropicNativeJsonSchema {
     async fn call(&self, system: &str, user: &str, schema: &Value) -> Result<Value, StrategyError> {
-        let body = json!({
-            "model": self.model,
-            "max_tokens": MAX_TOKENS,
-            "system": system,
-            "messages": [{ "role": "user", "content": user }],
-            // Anthropic's structured-outputs beta uses a flat shape: type and the
-            // schema live directly under output_format, no nested json_schema wrapper.
-            "output_format": {
-                "type": "json_schema",
-                "schema": schema
-            }
-        });
+        let mut body = build_native_json_schema_body(&self.model, system, user, schema);
+        self.body_options.apply(&mut body);
 
         let headers = anthropic_headers_with_beta(self.api_key.as_deref());
         let headers_ref: Vec<(&str, &str)> = headers
@@ -118,6 +116,7 @@ pub struct AnthropicToolCallAndPrompt {
     base_url: String,
     api_key: Option<String>,
     model: String,
+    body_options: BodyOptions,
 }
 
 impl AnthropicToolCallAndPrompt {
@@ -132,7 +131,13 @@ impl AnthropicToolCallAndPrompt {
             base_url,
             api_key,
             model,
+            body_options: BodyOptions::default(),
         }
+    }
+
+    pub fn with_body_options(mut self, body_options: BodyOptions) -> Self {
+        self.body_options = body_options;
+        self
     }
 }
 
@@ -141,18 +146,8 @@ impl JsonStrategy for AnthropicToolCallAndPrompt {
     async fn call(&self, system: &str, user: &str, schema: &Value) -> Result<Value, StrategyError> {
         let augmented_system = format!("{system}{ANTHROPIC_TOOL_NUDGE}");
 
-        let body = json!({
-            "model": self.model,
-            "max_tokens": MAX_TOKENS,
-            "system": augmented_system,
-            "messages": [{ "role": "user", "content": user }],
-            "tools": [{
-                "name": TOOL_NAME,
-                "description": TOOL_DESCRIPTION,
-                "input_schema": schema
-            }],
-            "tool_choice": { "type": "tool", "name": TOOL_NAME }
-        });
+        let mut body = build_tool_call_body(&self.model, &augmented_system, user, schema);
+        self.body_options.apply(&mut body);
 
         let headers = anthropic_headers(self.api_key.as_deref());
         let headers_ref: Vec<(&str, &str)> = headers
@@ -180,6 +175,38 @@ impl JsonStrategy for AnthropicToolCallAndPrompt {
     }
 }
 
+// --- Request body builders ---
+
+fn build_native_json_schema_body(model: &str, system: &str, user: &str, schema: &Value) -> Value {
+    json!({
+        "model": model,
+        "max_tokens": MAX_TOKENS,
+        "system": system,
+        "messages": [{ "role": "user", "content": user }],
+        // Anthropic's structured-outputs beta uses a flat shape: type and the
+        // schema live directly under output_format, no nested json_schema wrapper.
+        "output_format": {
+            "type": "json_schema",
+            "schema": schema
+        }
+    })
+}
+
+fn build_tool_call_body(model: &str, system: &str, user: &str, schema: &Value) -> Value {
+    json!({
+        "model": model,
+        "max_tokens": MAX_TOKENS,
+        "system": system,
+        "messages": [{ "role": "user", "content": user }],
+        "tools": [{
+            "name": TOOL_NAME,
+            "description": TOOL_DESCRIPTION,
+            "input_schema": schema
+        }],
+        "tool_choice": { "type": "tool", "name": TOOL_NAME }
+    })
+}
+
 // --- Response extraction helpers ---
 
 // TODO(e2e): Anthropic's exact response shape for output_format=json_schema needs
@@ -189,11 +216,11 @@ fn extract_anthropic_native_json(response: &Value) -> Result<Value, StrategyErro
         .get("content")
         .and_then(|c| c.as_array())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!("AnthropicNativeJsonSchema: no content array"))
+            StrategyError::Permanent(anyhow!("AnthropicNativeJsonSchema: no content array"))
         })?;
 
     if content.is_empty() {
-        return Err(StrategyError::Transient(anyhow!(
+        return Err(StrategyError::Permanent(anyhow!(
             "AnthropicNativeJsonSchema: content array was empty"
         )));
     }
@@ -207,13 +234,13 @@ fn extract_anthropic_native_json(response: &Value) -> Result<Value, StrategyErro
     });
 
     let block = json_block.ok_or_else(|| {
-        StrategyError::Transient(anyhow!(
+        StrategyError::Permanent(anyhow!(
             "AnthropicNativeJsonSchema: no JSON block in content"
         ))
     })?;
 
     block.get("json").cloned().ok_or_else(|| {
-        StrategyError::Transient(anyhow!(
+        StrategyError::Permanent(anyhow!(
             "AnthropicNativeJsonSchema: JSON block had no 'json' field"
         ))
     })
@@ -224,11 +251,11 @@ fn extract_anthropic_tool_input(response: &Value) -> Result<Value, StrategyError
         .get("content")
         .and_then(|c| c.as_array())
         .ok_or_else(|| {
-            StrategyError::Transient(anyhow!("AnthropicToolCallAndPrompt: no content array"))
+            StrategyError::Permanent(anyhow!("AnthropicToolCallAndPrompt: no content array"))
         })?;
 
     if content.is_empty() {
-        return Err(StrategyError::Transient(anyhow!(
+        return Err(StrategyError::Permanent(anyhow!(
             "AnthropicToolCallAndPrompt: content array was empty"
         )));
     }
@@ -239,7 +266,7 @@ fn extract_anthropic_tool_input(response: &Value) -> Result<Value, StrategyError
         .find(|block| block.get("type").and_then(|t| t.as_str()) == Some("tool_use"));
 
     let block = tool_block.ok_or_else(|| {
-        StrategyError::Transient(anyhow!(
+        StrategyError::Permanent(anyhow!(
             "AnthropicToolCallAndPrompt: no tool_use block in content"
         ))
     })?;
@@ -247,7 +274,7 @@ fn extract_anthropic_tool_input(response: &Value) -> Result<Value, StrategyError
     // Verify the model called the right tool.
     let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
     if name != TOOL_NAME {
-        return Err(StrategyError::Transient(anyhow!(
+        return Err(StrategyError::Permanent(anyhow!(
             "AnthropicToolCallAndPrompt: model called unexpected tool '{name}'"
         )));
     }
@@ -256,7 +283,7 @@ fn extract_anthropic_tool_input(response: &Value) -> Result<Value, StrategyError
     // It's not expected to be a string in practice, but we return whatever shape
     // Anthropic gave us and let the caller validate.
     block.get("input").cloned().ok_or_else(|| {
-        StrategyError::Transient(anyhow!(
+        StrategyError::Permanent(anyhow!(
             "AnthropicToolCallAndPrompt: tool_use block had no 'input' field"
         ))
     })
@@ -268,6 +295,32 @@ mod tests {
     use serde_json::json;
 
     use crate::llm::test_dsl::{extract_fails_with, extract_succeeds};
+
+    // --- request bodies ---
+
+    /// `max_tokens` is not optional on this endpoint, so the override must
+    /// replace the built-in default rather than sit alongside it.
+    fn assert_options_applied(mut body: Value) {
+        assert_eq!(body["max_tokens"], json!(MAX_TOKENS));
+        BodyOptions {
+            max_tokens: Some(64),
+            extra: crate::llm::body::parse_extra_body(r#"{"temperature":0}"#).unwrap(),
+        }
+        .apply(&mut body);
+        assert_eq!(body["max_tokens"], json!(64));
+        assert_eq!(body["temperature"], json!(0));
+        assert!(body["messages"].is_array(), "prompt survives the merge");
+    }
+
+    #[test]
+    fn native_body_takes_options() {
+        assert_options_applied(build_native_json_schema_body("m", "sys", "usr", &json!({})));
+    }
+
+    #[test]
+    fn tool_call_body_takes_options() {
+        assert_options_applied(build_tool_call_body("m", "sys", "usr", &json!({})));
+    }
 
     // --- extract_anthropic_native_json ---
 
