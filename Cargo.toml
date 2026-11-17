@@ -19,7 +19,8 @@ unicode-ident = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-tokio = { version = "1.52.2", features = ["macros", "rt-multi-thread"] }
+sha2 = "0.10"
+tokio = { version = "1.52.2", features = ["macros", "rt-multi-thread", "time"] }
 async-trait = "0.1"
 
 [dev-dependencies]

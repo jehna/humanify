@@ -59,8 +59,11 @@ impl HttpClient {
             .map_err(|e| StrategyError::Transient(anyhow!(e)))?;
 
         if (200..300).contains(&status) {
+            // A 2xx whose body isn't JSON is a provider/model behaviour problem,
+            // not a network blip: re-sending the identical request would produce
+            // the same garbage. Permanent, so the retry loop doesn't multiply it.
             let value: Value = serde_json::from_str(&body_text).map_err(|e| {
-                StrategyError::Transient(anyhow!("response was not valid JSON: {e}"))
+                StrategyError::Permanent(anyhow!("response was not valid JSON: {e}"))
             })?;
             Ok(value)
         } else {
@@ -77,9 +80,18 @@ impl Default for HttpClient {
 
 pub enum StrategyError {
     /// Provider rejected this strategy permanently for this endpoint/model combo.
+    /// The `Ladder` falls through to the next strategy and marks this one dead.
     NotSupported(String),
-    /// Network / rate-limit / 5xx / parse failure — propagate to user.
+    /// Network failure / 408 / 429 / 5xx — the identical request may well succeed
+    /// if sent again, so `LlmRenamer` retries these with backoff.
     Transient(anyhow::Error),
+    /// The request itself is wrong or the provider's answer is unusable: bad
+    /// credentials (401/403), invalid model or malformed request (other 4xx), a
+    /// response humanify cannot parse, or a ladder with no strategy left. Sending
+    /// the identical request again cannot help, so it is **never** retried —
+    /// otherwise a single bad API key would cost `max_retries + 1` requests and
+    /// several seconds of backoff for every identifier in the file.
+    Permanent(anyhow::Error),
 }
 
 impl StrategyError {
@@ -87,8 +99,14 @@ impl StrategyError {
         matches!(self, StrategyError::NotSupported(_))
     }
 
+    /// True only for errors worth retrying. This is the retry predicate: adding a
+    /// new error kind means deciding, here, whether re-sending can help.
     pub fn is_transient(&self) -> bool {
         matches!(self, StrategyError::Transient(_))
+    }
+
+    pub fn is_permanent(&self) -> bool {
+        matches!(self, StrategyError::Permanent(_))
     }
 }
 
@@ -96,7 +114,7 @@ impl std::fmt::Display for StrategyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StrategyError::NotSupported(msg) => write!(f, "strategy not supported: {msg}"),
-            StrategyError::Transient(e) => write!(f, "{e}"),
+            StrategyError::Transient(e) | StrategyError::Permanent(e) => write!(f, "{e}"),
         }
     }
 }
@@ -106,6 +124,7 @@ impl std::fmt::Debug for StrategyError {
         match self {
             StrategyError::NotSupported(msg) => f.debug_tuple("NotSupported").field(msg).finish(),
             StrategyError::Transient(e) => f.debug_tuple("Transient").field(e).finish(),
+            StrategyError::Permanent(e) => f.debug_tuple("Permanent").field(e).finish(),
         }
     }
 }
@@ -113,7 +132,7 @@ impl std::fmt::Debug for StrategyError {
 impl std::error::Error for StrategyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            StrategyError::Transient(e) => e.source(),
+            StrategyError::Transient(e) | StrategyError::Permanent(e) => e.source(),
             StrategyError::NotSupported(_) => None,
         }
     }
@@ -163,8 +182,9 @@ pub fn classify_error(status: u16, body: &str) -> StrategyError {
     if status == 408 {
         return StrategyError::Transient(anyhow!("http 408: request timeout"));
     }
+    // Credentials don't fix themselves between attempts.
     if status == 401 || status == 403 {
-        return StrategyError::Transient(anyhow!("http {status}: {body}"));
+        return StrategyError::Permanent(anyhow!("http {status}: {body}"));
     }
 
     // Rule 5: 4xx — inspect body
@@ -236,12 +256,13 @@ pub fn classify_error(status: u16, body: &str) -> StrategyError {
             return not_supported(status, message);
         }
 
-        // Unknown 4xx — Transient
-        return StrategyError::Transient(anyhow!("http {status}: {body}"));
+        // Unknown 4xx (invalid model, malformed request, content policy, 404 …).
+        // The server understood us and said no; asking again says no again.
+        return StrategyError::Permanent(anyhow!("http {status}: {body}"));
     }
 
-    // Rule 6: anything else (3xx, weird codes)
-    StrategyError::Transient(anyhow!("http {status}: {body}"))
+    // Rule 6: anything else (3xx, weird codes) — not a retry candidate either.
+    StrategyError::Permanent(anyhow!("http {status}: {body}"))
 }
 
 #[cfg(test)]
@@ -254,25 +275,30 @@ mod tests {
     fn not_supported_reason(status: u16, body: &str) -> String {
         match classify_error(status, body) {
             StrategyError::NotSupported(r) => r,
-            StrategyError::Transient(e) => panic!("expected NotSupported, got Transient: {e}"),
+            other => panic!("expected NotSupported, got {other:?}"),
         }
     }
 
+    /// Retryable: a later attempt could plausibly succeed.
     fn assert_transient(status: u16, body: &str) {
         match classify_error(status, body) {
             StrategyError::Transient(_) => {}
-            StrategyError::NotSupported(r) => {
-                panic!("expected Transient, got NotSupported({r})")
-            }
+            other => panic!("expected Transient, got {other:?}"),
+        }
+    }
+
+    /// Not retryable: the same request would fail the same way.
+    fn assert_permanent(status: u16, body: &str) {
+        match classify_error(status, body) {
+            StrategyError::Permanent(_) => {}
+            other => panic!("expected Permanent, got {other:?}"),
         }
     }
 
     fn assert_not_supported(status: u16, body: &str) {
         match classify_error(status, body) {
             StrategyError::NotSupported(_) => {}
-            StrategyError::Transient(e) => {
-                panic!("expected NotSupported, got Transient: {e}")
-            }
+            other => panic!("expected NotSupported, got {other:?}"),
         }
     }
 
@@ -296,14 +322,17 @@ mod tests {
         assert_transient(408, "timeout");
     }
 
+    // 401/403 and unknown 4xx are Permanent, not Transient: retrying a bad key or
+    // a bad model name burns `max_retries + 1` requests per identifier and cannot
+    // succeed. See StrategyError::Permanent.
     #[test]
-    fn status_401_is_transient() {
-        assert_transient(401, r#"{"error": {"message": "invalid api key"}}"#);
+    fn status_401_is_permanent() {
+        assert_permanent(401, r#"{"error": {"message": "invalid api key"}}"#);
     }
 
     #[test]
-    fn status_403_is_transient() {
-        assert_transient(403, r#"{"error": {"message": "forbidden"}}"#);
+    fn status_403_is_permanent() {
+        assert_permanent(403, r#"{"error": {"message": "forbidden"}}"#);
     }
 
     #[test]
@@ -380,46 +409,46 @@ mod tests {
     }
 
     #[test]
-    fn status_400_invalid_model_name_is_transient() {
+    fn status_400_invalid_model_name_is_permanent() {
         let body = r#"{"error":{"message":"The model 'gpt-9000' does not exist"}}"#;
-        assert_transient(400, body);
+        assert_permanent(400, body);
     }
 
     #[test]
-    fn status_400_content_policy_is_transient() {
+    fn status_400_content_policy_is_permanent() {
         let body = r#"{"error":{"message":"Your request was rejected by content moderation"}}"#;
-        assert_transient(400, body);
+        assert_permanent(400, body);
     }
 
     #[test]
-    fn status_400_malformed_prompt_is_transient() {
+    fn status_400_malformed_prompt_is_permanent() {
         let body = r#"{"error":{"message":"Invalid prompt format"}}"#;
-        assert_transient(400, body);
+        assert_permanent(400, body);
     }
 
     #[test]
-    fn status_400_plain_text_body_is_transient() {
-        assert_transient(400, "Bad Request");
+    fn status_400_plain_text_body_is_permanent() {
+        assert_permanent(400, "Bad Request");
     }
 
     #[test]
-    fn status_400_non_json_body_is_transient() {
-        assert_transient(400, "<html>...</html>");
+    fn status_400_non_json_body_is_permanent() {
+        assert_permanent(400, "<html>...</html>");
     }
 
     #[test]
-    fn status_400_malformed_json_body_is_transient() {
-        assert_transient(400, "{not valid json");
+    fn status_400_malformed_json_body_is_permanent() {
+        assert_permanent(400, "{not valid json");
     }
 
     #[test]
-    fn status_404_is_transient() {
-        assert_transient(404, r#"{"error":{"message":"not found"}}"#);
+    fn status_404_is_permanent() {
+        assert_permanent(404, r#"{"error":{"message":"not found"}}"#);
     }
 
     #[test]
-    fn status_300_is_transient() {
-        assert_transient(300, "");
+    fn status_300_is_permanent() {
+        assert_permanent(300, "");
     }
 
     #[test]

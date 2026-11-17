@@ -141,8 +141,58 @@ humanify <openai|gemini|anthropic|ollama|openrouter|requesty> [FLAGS] <INPUT>
   `forced-tool-call`, `tool-call-and-prompt`, `prompt`.
 * `-v` prints resolved configuration and identifier-level rename steps to stderr.
 * `--progress` shows an identifier progress bar on stderr.
+* `--cache-dir <DIR>` caches every LLM response on disk, keyed by identifier +
+  context window (the model is deliberately *not* part of the key). Interrupted
+  runs resume for free: re-run with the same `--cache-dir` and only the missing
+  identifiers are requested. Also settable via `HUMANIFY_CACHE_DIR`;
+  `--no-cache` overrides both.
+* `--refresh-cache` ignores stored answers but keeps writing fresh ones, so the
+  model is re-asked and the cache is overwritten. Use it to re-do a file with a
+  better model, or to A/B two models over the same input. Distinct from
+  `--no-cache`, which disables reads *and* writes; it is an error to pass it
+  without a cache configured.
+* `--cache-context-size <N>` sets the context window used to build the cache
+  key, independently of the window sent to the model. Defaults to
+  `--context-size`, so leaving it unset preserves existing cache entries. Pin one
+  value so that runs at different `--context-size` still share entries. May be
+  larger than `--context-size`. Also settable via `HUMANIFY_CACHE_CONTEXT_SIZE`;
+  passing the flag without a cache configured is an error.
+* `--max-retries <N>` retries transient errors (429 / 5xx / network) with
+  exponential backoff (default 3).
+* `--max-run-seconds <N>` gives the run a wall-clock budget. When it expires the
+  remaining identifiers are left unchanged and the partial output is still
+  written; combined with `--cache-dir`, a re-run continues where it stopped.
+  Omitted or 0 means unlimited — there is no upper bound.
+* `--timeout-seconds <N>` per-request HTTP timeout in seconds (overrides preset default).
+* `--max-tokens <N>` caps the response length. Unset by default on hosted APIs.
+  Reasoning tokens count against this budget on most providers, so only cap a
+  thinking model once thinking is off — otherwise the reply gets truncated to
+  nothing and the call fails.
+* `--extra-body <JSON>` merges a JSON object into every request body (or
+  `@file.json` to read it from a file). Top-level keys override humanify's;
+  `messages`, `system` and `stream` are rejected. This is the escape hatch for
+  provider-specific parameters humanify has no flag for.
 
 Run `humanify --help` for the full reference.
+
+### Reasoning models
+
+A hybrid reasoning model left on its default settings will happily spend
+thousands of chain-of-thought tokens choosing a one-word identifier name, which
+shows up as occasional multi-minute requests in an otherwise fast run. Turning
+thinking off is provider-specific, so it goes through `--extra-body` — for GLM
+models on Z.ai:
+
+```shell
+humanify openai obfuscated.js \
+  --base-url https://api.z.ai/api/coding/paas/v4 -m GLM-4.6 \
+  --extra-body '{"thinking":{"type":"disabled"},"temperature":0}' \
+  --max-tokens 128
+```
+
+Note that the response cache is not keyed on these two flags: entries written
+before you changed them are still served afterwards. Add `--no-cache` (or use a
+separate `--cache-dir`) when comparing settings.
 
 Note: humanify does one job — rename identifiers in one JavaScript file in,
 one out. To unbundle webpack output first, pipe through e.g.
@@ -261,6 +311,57 @@ Default model: `nvidia/nemotron-3-super-120b-a12b`. Override with `-m`:
 ```shell
 humanify requesty obfuscated.js -m nvidia/nemotron-3-super-120b-a12b
 ```
+
+## Caching
+
+humanify supports persistent on-disk response caching via `--cache-dir <DIR>` or the `HUMANIFY_CACHE_DIR` environment variable. `--no-cache` disables caching even if a directory is set.
+
+When caching is enabled, every successful LLM response is persisted to `<DIR>/humanify-cache-v1/` immediately upon receipt. If a run is interrupted (e.g. killed, Ctrl+C, or hits `--max-run-seconds`), repeating the command reuses all completed responses without making additional network calls.
+
+### What invalidates cache entries
+A cache key identifies the *code being asked about*, and nothing else. It is derived from:
+- **Identifier name & Context window**: The original identifier name and surrounding context code slice.
+- **`--context-size` changes**: Changing `--context-size` alters the context window slices and therefore invalidates existing entries for that file — unless you pin `--cache-context-size` (see below).
+
+### Keying independently of `--context-size`
+
+`--cache-context-size <N>` builds the cache key from its own window while the model still sees the `--context-size` one. Pin it, and an expensive pass at `--context-size 2000` and a cheap pass at `--context-size 300` share every entry instead of each paying in full.
+
+The value matters less than its stability: **pick one and never change it.** A smaller key window yields more hits but a higher chance that a name derived from a narrow neighbourhood is reused where a wide-context run would have produced a better one — the same deliberate reuse trade-off already made by keeping the model out of the key.
+
+Two things worth knowing before choosing a number:
+
+- **The window is the enclosing scope, not a fixed slice around the identifier.** When that scope fits inside the size, the *whole scope* is used and the size is irrelevant. Both the trade-off above and the flag itself therefore only bite for identifiers in scopes larger than the key window — top-level symbols in a minified bundle, and very large module functions. Everything else already shares entries at any size.
+- **`N` is counted in bytes**, rounded out to the nearest UTF-8 character boundary, as `--context-size` is.
+
+Each entry records the `context_size` and `cache_context_size` it was written under, so a run that unexpectedly shares nothing can be diagnosed from the entry JSON. Neither is part of the key: an entry written at one pair of sizes is deliberately served to a run using another.
+
+Entries are never invalidated by anything describing *how* the question was asked:
+- **The model, provider, base URL, or JSON mode.** See below.
+- **The prompt, JSON schema, and request shape** — including humanify upgrades that change them. A warm cache keeps serving its stored answers until you refresh it.
+- API keys (secrets never affect cache keys or entries).
+- CLI flags like `--timeout-seconds`, `--max-retries`, `--verbose`, or `--progress`.
+
+### Mixing models over one file
+
+Because neither the model nor the prompt is part of the key, answers are shared across runs. That makes a mixed-cost pass possible: run an expensive model over the part of a bundle you actually care about, then a cheap model over the whole file, and the expensive answers are reused instead of being re-bought. Order does not matter — whichever run reaches an identifier first supplies its name.
+
+The trade-off is that one output can contain names from several models or several humanify versions, invisibly. Two ways to take control:
+
+- `--refresh-cache` re-asks the model and overwrites what is stored, so a second run at a better setting genuinely replaces the earlier answers.
+- A separate `--cache-dir` gives a run its own namespace — what you want for a clean A/B comparison between models or prompts.
+
+Each entry still records the provider, model, base URL, JSON mode and prompt fingerprint that produced it, so the origin of any cached name remains inspectable in the entry's JSON.
+
+Failures (e.g., network errors, 429 rate limits, malformed responses) and skipped identifiers are **never cached**. The cache directory is safe to delete at any time, and multiple concurrent humanify processes can safely share the same cache directory.
+
+### Reuse across different-but-similar files
+
+Cache entries can be reused across different versions of a bundle or across related files. Because context windows are anchored to the enclosing scope rather than absolute file offsets:
+- Adding or removing code elsewhere in a file does not change the scope content of untouched functions.
+- Untouched functions reuse cached renames directly.
+
+**Note on re-minified bundles:** The identifier name is part of the cache key because it is interpolated into the prompt. If a file is re-minified with newly scrambled/reassigned variable names (e.g. `function(a,e,t)` changed to `function(e,t,n)`), the prompt and context bytes differ, reducing cache reuse even if the underlying code logic is unchanged. Stable identifier assignment or hand-edited bundles achieve high cache reuse.
 
 ## Features
 

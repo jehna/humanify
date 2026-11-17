@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
 
-use super::{rename_all_identifiers, Renamer};
+use super::{
+    rename_all_identifiers, rename_all_identifiers_with_options, NoopRenameObserver, RenameOptions,
+    RenameOutcome, RenameRequest, Renamer,
+};
 
 // --- Renamer constructors ---
 
@@ -32,6 +35,32 @@ impl Renamer for IdentityRenamer {
     }
 }
 
+/// Always fails. `rename` (the fallback path) returns the original.
+pub struct FailingRenamer(String);
+impl Renamer for FailingRenamer {
+    fn rename(&mut self, original: &str, _: &str) -> String {
+        original.to_string()
+    }
+    fn try_rename(&mut self, _req: &RenameRequest<'_>) -> RenameOutcome {
+        RenameOutcome::Failed {
+            reason: self.0.clone(),
+        }
+    }
+}
+
+/// Always skips. `rename` (the fallback path) returns the original.
+pub struct SkippingRenamer(String);
+impl Renamer for SkippingRenamer {
+    fn rename(&mut self, original: &str, _: &str) -> String {
+        original.to_string()
+    }
+    fn try_rename(&mut self, _req: &RenameRequest<'_>) -> RenameOutcome {
+        RenameOutcome::Skipped {
+            reason: self.0.clone(),
+        }
+    }
+}
+
 /// Renames based on the original name via a lookup table; unmapped names are
 /// left unchanged. Order-independent, unlike `queue`, which makes it convenient
 /// for testing scope-aware collision behaviour regardless of traversal order.
@@ -50,30 +79,50 @@ pub struct RecordingRenamer {
     pub log: CallLog,
 }
 
-/// Captures `(original, surrounding)` pairs for each rename call.
+/// Captures `(original, surrounding, cache_context)` triples for each rename
+/// call. The third element is what the cache would key on, which is only
+/// observable here — the cache layer itself hashes it away.
 #[derive(Default, Clone)]
-pub struct CallLog(pub Vec<(String, String)>);
+pub struct CallLog(pub Vec<(String, String, String)>);
 
 impl CallLog {
     pub fn call_names(&self) -> Vec<&str> {
-        self.0.iter().map(|(n, _)| n.as_str()).collect()
+        self.0.iter().map(|(n, _, _)| n.as_str()).collect()
     }
 
     pub fn scope_for(&self, name: &str) -> &str {
         self.0
             .iter()
-            .find(|(n, _)| n == name)
-            .map(|(_, s)| s.as_str())
+            .find(|(n, _, _)| n == name)
+            .map(|(_, s, _)| s.as_str())
+            .unwrap_or_else(|| panic!("no call recorded for '{name}'"))
+    }
+
+    /// The window the cache key would be built from for `name`.
+    pub fn cache_context_for(&self, name: &str) -> &str {
+        self.0
+            .iter()
+            .find(|(n, _, _)| n == name)
+            .map(|(_, _, c)| c.as_str())
             .unwrap_or_else(|| panic!("no call recorded for '{name}'"))
     }
 }
 
 impl Renamer for RecordingRenamer {
     fn rename(&mut self, original: &str, surrounding: &str) -> String {
-        self.log
-            .0
-            .push((original.to_string(), surrounding.to_string()));
-        format!("{original}{}", self.suffix)
+        match self.try_rename(&RenameRequest::new(original, surrounding)) {
+            RenameOutcome::Ok(n) => n,
+            _ => original.to_string(),
+        }
+    }
+
+    fn try_rename(&mut self, req: &RenameRequest<'_>) -> RenameOutcome {
+        self.log.0.push((
+            req.original.to_string(),
+            req.surrounding.to_string(),
+            req.cache_context.to_string(),
+        ));
+        RenameOutcome::Ok(format!("{}{}", req.original, self.suffix))
     }
 }
 
@@ -91,6 +140,14 @@ pub fn suffix(sfx: &str) -> SuffixRenamer {
 
 pub fn identity() -> IdentityRenamer {
     IdentityRenamer
+}
+
+pub fn failing(reason: &str) -> FailingRenamer {
+    FailingRenamer(reason.to_string())
+}
+
+pub fn skipping(reason: &str) -> SkippingRenamer {
+    SkippingRenamer(reason.to_string())
 }
 
 pub fn recording(sfx: &str) -> RecordingRenamer {
@@ -114,12 +171,14 @@ pub fn mapping(pairs: &[(&str, &str)]) -> MapRenamer {
 pub struct ScenarioBuilder {
     source: String,
     context_size: usize,
+    cache_context_size: Option<usize>,
 }
 
 pub fn scenario(source: &str) -> ScenarioBuilder {
     ScenarioBuilder {
         source: source.to_string(),
         context_size: 200,
+        cache_context_size: None,
     }
 }
 
@@ -129,22 +188,38 @@ impl ScenarioBuilder {
         self
     }
 
+    /// `--cache-context-size`. Unset means it follows `context_size`.
+    pub fn with_cache_context_size(mut self, n: usize) -> Self {
+        self.cache_context_size = Some(n);
+        self
+    }
+
+    fn options(&self) -> RenameOptions {
+        RenameOptions {
+            context_size: self.context_size,
+            cache_context_size: self.cache_context_size.unwrap_or(self.context_size),
+        }
+    }
+
+    fn run(&self, renamer: &mut dyn Renamer) -> String {
+        rename_all_identifiers_with_options(
+            &self.source,
+            renamer,
+            &self.options(),
+            &mut NoopRenameObserver,
+        )
+        .expect("rename_all_identifiers failed")
+    }
+
     pub fn renamed_with<R: Renamer>(self, mut renamer: R) -> RenamedScenario {
-        let result = rename_all_identifiers(&self.source, &mut renamer, self.context_size);
         RenamedScenario {
-            output: result.expect("rename_all_identifiers failed"),
+            output: self.run(&mut renamer),
         }
     }
 
     pub fn with_recording(self, mut renamer: RecordingRenamer) -> (RenamedScenario, CallLog) {
-        let result = rename_all_identifiers(&self.source, &mut renamer, self.context_size);
-        let log = renamer.log;
-        (
-            RenamedScenario {
-                output: result.expect("rename_all_identifiers failed"),
-            },
-            log,
-        )
+        let output = self.run(&mut renamer);
+        (RenamedScenario { output }, renamer.log)
     }
 
     pub fn parses_unchanged(self) {
