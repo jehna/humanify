@@ -127,7 +127,7 @@ cargo install --git https://github.com/jehna/humanify
 ### Usage
 
 ```shell
-humanify <openai|gemini|anthropic|ollama|openrouter|requesty> [FLAGS] <INPUT>
+humanify <openai|gemini|anthropic|ollama|openrouter|requesty|cheaperinference> [FLAGS] <INPUT>
 ```
 
 * `<INPUT>` is a file path or `-` for stdin.
@@ -262,6 +262,25 @@ Default model: `nvidia/nemotron-3-super-120b-a12b`. Override with `-m`:
 humanify requesty obfuscated.js -m nvidia/nemotron-3-super-120b-a12b
 ```
 
+### Cheaper Inference mode
+
+[Cheaper Inference](https://cheaperinference.com/) provides an OpenAI-compatible
+gateway to models from several labs via a single API key.
+
+You'll need a Cheaper Inference API key. Sign up at
+https://cheaperinference.com/signup.
+
+```shell
+export CHEAPER_INFERENCE_API_KEY=your-token
+humanify cheaperinference obfuscated.js -o readable.js
+```
+
+Default model: `gpt-5.4-mini`. Override with `-m`:
+
+```shell
+humanify cheaperinference obfuscated.js -m claude-sonnet-5
+```
+
 ## Features
 
 * Uses LLMs to get smart suggestions to rename variable and function names, and
@@ -290,8 +309,8 @@ every PR. Local `ollama` and judge e2e suites also run on every PR.
 The `gemini` e2e suite runs by default only for branches in this repository.
 Other providers' e2e suites require both a branch in this repository and
 their corresponding label (`test-openai`, `test-anthropic`,
-`test-openrouter`, `test-requesty`) to avoid exposing secrets to forks or
-burning API credits on every PR.
+`test-openrouter`, `test-requesty`, `test-cheaperinference`) to avoid
+exposing secrets to forks or burning API credits on every PR.
 
 ## Star History
 
